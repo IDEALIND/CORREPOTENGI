@@ -14,7 +14,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:ital,wght@0,600;0,700;0,800;0,900;1,700;1,800&family=Bebas+Neue&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Permanent+Marker&display=swap" rel="stylesheet">
 
-  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="style.css?v=2">
 </head>
 <body>
   <!-- Container Mobile 9:16 Enclosure (Optimized for Mobile Screens & Desktop Preview) -->
@@ -815,9 +815,47 @@
   </div>
 
   <!-- ==============================================
-       PAINEL DO GESTOR (ATIVADO POR 3 CLIQUES NA LOGO)
+       MODAL DE LOGIN DO GESTOR (ADMMASTER / ADM310280)
        ============================================== -->
-  <div class="manager-backdrop" id="managerDashboardModal" aria-hidden="true">
+  <div class="manager-backdrop" id="managerLoginModal" style="display: none;" aria-hidden="true">
+    <div class="manager-login-card">
+      <div class="manager-login-header">
+        <div class="login-brand-icon">🔒</div>
+        <h3 class="login-title">ACESSO DO GESTOR</h3>
+        <p class="login-subtitle">Informe as credenciais de administrador</p>
+        <button type="button" class="login-close-btn" id="closeManagerLoginBtn" aria-label="Fechar login">✕</button>
+      </div>
+
+      <form id="managerLoginForm" class="manager-login-form" autocomplete="off">
+        <div class="login-input-group">
+          <label for="admUserInput">USUÁRIO:</label>
+          <input type="text" id="admUserInput" placeholder="Ex: ADMMASTER" required autocomplete="off" autocapitalize="characters">
+        </div>
+
+        <div class="login-input-group">
+          <label for="admPassInput">SENHA:</label>
+          <div class="password-wrapper">
+            <input type="password" id="admPassInput" placeholder="Sua senha de gestor" required autocomplete="current-password">
+            <button type="button" class="btn-toggle-password" id="btnTogglePassword" aria-label="Mostrar ou ocultar senha">👁️</button>
+          </div>
+        </div>
+
+        <div class="login-error-msg" id="admLoginError" style="display: none;">
+          ⚠️ Usuário ou senha incorretos!
+        </div>
+
+        <button type="submit" class="btn-login-submit" id="btnManagerLoginSubmit">
+          <span>ENTRAR NO PAINEL</span>
+          <span>→</span>
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <!-- ==============================================
+       PAINEL DO GESTOR (ATIVADO POR 3 CLIQUES NA LOGO APÓS LOGIN)
+       ============================================== -->
+  <div class="manager-backdrop" id="managerDashboardModal" style="display: none;" aria-hidden="true">
     <div class="manager-modal-card">
       
       <!-- Topo do Painel -->
@@ -825,12 +863,15 @@
         <div class="manager-brand-badge">
           <div class="manager-badge-pill">
             <span class="pulsing-dot-green"></span>
-            <span>PAINEL DO GESTOR OFICIAL</span>
+            <span>PAINEL DO GESTOR OFICIAL • ADMMASTER</span>
           </div>
           <h3 class="manager-title">CONTROLE DE PEDIDOS & COMPROVANTES</h3>
           <p class="manager-subtitle">Clientes separados por nome, tamanho e WhatsApp em tempo real</p>
         </div>
-        <button type="button" class="manager-close-btn" id="closeManagerBtn" aria-label="Fechar Painel">✕</button>
+        <div class="header-right-btns">
+          <button type="button" class="btn-manager-logout" id="btnManagerLogout" title="Sair do painel">🚪 Sair</button>
+          <button type="button" class="manager-close-btn" id="closeManagerBtn" aria-label="Fechar Painel">✕</button>
+        </div>
       </div>
 
       <!-- Barra de Ações Rápidas -->
@@ -931,7 +972,7 @@
   </div>
 
   <!-- Modal Zoom do Comprovante (Lightroom) -->
-  <div class="receipt-zoom-backdrop" id="receiptZoomModal" aria-hidden="true">
+  <div class="receipt-zoom-backdrop" id="receiptZoomModal" style="display: none;" aria-hidden="true">
     <div class="receipt-zoom-card">
       <div class="receipt-zoom-header">
         <div class="zoom-header-info">
@@ -953,8 +994,8 @@
   </div>
 
   <!-- Toast Notificação do Gestor -->
-  <div class="manager-toast" id="managerToast" aria-live="polite"></div>
+  <div class="manager-toast" id="managerToast" style="display: none;" aria-live="polite"></div>
 
-  <script src="script.js"></script>
+  <script src="script.js?v=3"></script>
 </body>
 </html>

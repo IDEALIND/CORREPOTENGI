@@ -112,20 +112,11 @@ document.addEventListener('DOMContentLoaded', () => {
   /* --------------------------------------------------
      3. HEADER DINÂMICO & BARRA STICKY INFERIOR NO SCROLL
      -------------------------------------------------- */
-  const mainHeader = document.getElementById('mainHeader');
   const stickyBottomBar = document.getElementById('stickyBottomBar');
   const heroCtaMain = document.getElementById('heroCtaMain');
 
   window.addEventListener('scroll', () => {
-    const scrollY = window.scrollY;
-
-    if (scrollY > 60) {
-      mainHeader.classList.add('scrolled');
-    } else {
-      mainHeader.classList.remove('scrolled');
-    }
-
-    if (heroCtaMain) {
+    if (heroCtaMain && stickyBottomBar) {
       const heroCtaPos = heroCtaMain.getBoundingClientRect();
       if (heroCtaPos.bottom < 0) {
         stickyBottomBar.classList.add('visible');
@@ -634,6 +625,19 @@ document.addEventListener('DOMContentLoaded', () => {
   /* --------------------------------------------------
      12. GATILHO SECRETO: 3 CLIQUES NA LOGO ABRE O PAINEL DO GESTOR
      -------------------------------------------------- */
+  /* --------------------------------------------------
+     12. AUTENTICAÇÃO DO GESTOR & GATILHO DE 3 CLIQUES NA LOGO
+     Usuário: ADMMASTER | Senha: ADM310280
+     -------------------------------------------------- */
+  const managerLoginModal = document.getElementById('managerLoginModal');
+  const closeManagerLoginBtn = document.getElementById('closeManagerLoginBtn');
+  const managerLoginForm = document.getElementById('managerLoginForm');
+  const admUserInput = document.getElementById('admUserInput');
+  const admPassInput = document.getElementById('admPassInput');
+  const admLoginError = document.getElementById('admLoginError');
+  const btnTogglePassword = document.getElementById('btnTogglePassword');
+  const btnManagerLogout = document.getElementById('btnManagerLogout');
+
   const managerDashboardModal = document.getElementById('managerDashboardModal');
   const closeManagerBtn = document.getElementById('closeManagerBtn');
   const headerBrandLink = document.getElementById('headerBrandLink');
@@ -645,15 +649,110 @@ document.addEventListener('DOMContentLoaded', () => {
   let logoClickCount = 0;
   let logoClickTimer = null;
 
+  function isManagerAuthenticated() {
+    return sessionStorage.getItem('corre_potengi_adm_auth') === 'true';
+  }
+
   function showManagerToast(text) {
     if (!managerToast) return;
     managerToast.textContent = text;
-    managerToast.classList.add('show');
+    managerToast.style.display = 'block';
+    requestAnimationFrame(() => {
+      managerToast.classList.add('show');
+    });
     setTimeout(() => {
       managerToast.classList.remove('show');
+      setTimeout(() => {
+        if (!managerToast.classList.contains('show')) {
+          managerToast.style.display = 'none';
+        }
+      }, 300);
     }, 2800);
   }
 
+  // Alternador de visualização da senha
+  if (btnTogglePassword && admPassInput) {
+    btnTogglePassword.addEventListener('click', () => {
+      if (admPassInput.type === 'password') {
+        admPassInput.type = 'text';
+        btnTogglePassword.textContent = '🔒';
+      } else {
+        admPassInput.type = 'password';
+        btnTogglePassword.textContent = '👁️';
+      }
+    });
+  }
+
+  // Abre Modal de Login
+  function openManagerLoginModal() {
+    if (!managerLoginModal) return;
+    if (admUserInput) admUserInput.value = '';
+    if (admPassInput) admPassInput.value = '';
+    if (admLoginError) admLoginError.style.display = 'none';
+
+    managerLoginModal.style.display = 'flex';
+    requestAnimationFrame(() => {
+      managerLoginModal.classList.add('open');
+      managerLoginModal.setAttribute('aria-hidden', 'false');
+      if (admUserInput) admUserInput.focus();
+    });
+  }
+
+  function closeManagerLoginModal() {
+    if (!managerLoginModal) return;
+    managerLoginModal.classList.remove('open');
+    managerLoginModal.setAttribute('aria-hidden', 'true');
+    setTimeout(() => {
+      if (!managerLoginModal.classList.contains('open')) {
+        managerLoginModal.style.display = 'none';
+      }
+    }, 280);
+  }
+
+  if (closeManagerLoginBtn) closeManagerLoginBtn.addEventListener('click', closeManagerLoginModal);
+  if (managerLoginModal) {
+    managerLoginModal.addEventListener('click', (e) => {
+      if (e.target === managerLoginModal) closeManagerLoginModal();
+    });
+  }
+
+  // Validação do Login do Gestor (ADMMASTER / ADM310280)
+  if (managerLoginForm) {
+    managerLoginForm.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const user = admUserInput?.value.trim().toUpperCase();
+      const pass = admPassInput?.value.trim();
+
+      if (user === 'ADMMASTER' && pass === 'ADM310280') {
+        // Autenticado com sucesso
+        sessionStorage.setItem('corre_potengi_adm_auth', 'true');
+        closeManagerLoginModal();
+        showManagerToast('🔓 Acesso autorizado! Bem-vindo, ADMMASTER.');
+        openManagerDashboard();
+      } else {
+        // Erro de credenciais
+        if (admLoginError) {
+          admLoginError.style.display = 'block';
+          admLoginError.textContent = '⚠️ Usuário ou senha incorretos!';
+        }
+        if (admPassInput) {
+          admPassInput.value = '';
+          admPassInput.focus();
+        }
+      }
+    });
+  }
+
+  // Logout do Gestor
+  if (btnManagerLogout) {
+    btnManagerLogout.addEventListener('click', () => {
+      sessionStorage.removeItem('corre_potengi_adm_auth');
+      closeManagerDashboard();
+      showManagerToast('🚪 Sessão de administrador encerrada.');
+    });
+  }
+
+  // Clique Triplo na Logo
   function handleLogoClick(e) {
     logoClickCount++;
     clearTimeout(logoClickTimer);
@@ -662,8 +761,14 @@ document.addEventListener('DOMContentLoaded', () => {
       e.preventDefault();
       e.stopPropagation();
       logoClickCount = 0;
-      showManagerToast('⚡ Acesso Gestor: Carregando Painel de Pedidos...');
-      openManagerDashboard();
+
+      if (isManagerAuthenticated()) {
+        showManagerToast('⚡ Abrindo Painel do Gestor...');
+        openManagerDashboard();
+      } else {
+        showManagerToast('🔒 Acesso Restrito: Identifique-se.');
+        openManagerLoginModal();
+      }
     } else {
       logoClickTimer = setTimeout(() => {
         logoClickCount = 0;
@@ -679,8 +784,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function openManagerDashboard() {
     if (!managerDashboardModal) return;
-    managerDashboardModal.classList.add('open');
-    managerDashboardModal.setAttribute('aria-hidden', 'false');
+    managerDashboardModal.style.display = 'flex';
+    requestAnimationFrame(() => {
+      managerDashboardModal.classList.add('open');
+      managerDashboardModal.setAttribute('aria-hidden', 'false');
+    });
     loadAndRenderDashboard();
   }
 
@@ -688,6 +796,11 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!managerDashboardModal) return;
     managerDashboardModal.classList.remove('open');
     managerDashboardModal.setAttribute('aria-hidden', 'true');
+    setTimeout(() => {
+      if (!managerDashboardModal.classList.contains('open')) {
+        managerDashboardModal.style.display = 'none';
+      }
+    }, 280);
   }
 
   if (closeManagerBtn) closeManagerBtn.addEventListener('click', closeManagerDashboard);
@@ -699,8 +812,10 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   window.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape' && managerDashboardModal && managerDashboardModal.classList.contains('open')) {
-      closeManagerDashboard();
+    if (e.key === 'Escape') {
+      if (managerLoginModal && managerLoginModal.classList.contains('open')) closeManagerLoginModal();
+      if (managerDashboardModal && managerDashboardModal.classList.contains('open')) closeManagerDashboard();
+      if (receiptZoomModal && receiptZoomModal.classList.contains('open')) closeReceiptZoom();
     }
   });
 
@@ -1064,14 +1179,22 @@ document.addEventListener('DOMContentLoaded', () => {
       receiptZoomContent.innerHTML = `<img src="${order.receiptDataUrl}" alt="Comprovante" class="receipt-zoom-img">`;
     }
 
-    receiptZoomModal.classList.add('open');
-    receiptZoomModal.setAttribute('aria-hidden', 'false');
+    receiptZoomModal.style.display = 'flex';
+    requestAnimationFrame(() => {
+      receiptZoomModal.classList.add('open');
+      receiptZoomModal.setAttribute('aria-hidden', 'false');
+    });
   }
 
   function closeReceiptZoom() {
     if (!receiptZoomModal) return;
     receiptZoomModal.classList.remove('open');
     receiptZoomModal.setAttribute('aria-hidden', 'true');
+    setTimeout(() => {
+      if (!receiptZoomModal.classList.contains('open')) {
+        receiptZoomModal.style.display = 'none';
+      }
+    }, 250);
     if (receiptZoomContent) receiptZoomContent.innerHTML = '';
   }
 
