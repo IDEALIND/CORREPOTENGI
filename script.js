@@ -566,13 +566,24 @@ document.addEventListener('DOMContentLoaded', () => {
 
   async function deleteOrderFromDB(id) {
     try {
-      // Remove do localStorage
+      // 1. Remove da Nuvem (Firebase)
+      const cloudUrl = getCloudDatabaseUrl();
+      if (cloudUrl) {
+        try {
+          await fetch(`${cloudUrl}/orders/${id}.json`, { method: 'DELETE' });
+        } catch (err) {
+          console.warn('Erro ao deletar da nuvem:', err);
+        }
+      }
+
+      // 2. Remove do localStorage
       const raw = localStorage.getItem('corre_potengi_orders_meta');
       if (raw) {
         let list = JSON.parse(raw).filter(item => item.id !== id);
         localStorage.setItem('corre_potengi_orders_meta', JSON.stringify(list));
       }
 
+      // 3. Remove do IndexedDB
       const db = await openGestorDB();
       if (db) {
         const tx = db.transaction(STORE_NAME, 'readwrite');
@@ -582,8 +593,21 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   async function clearAllOrdersFromDB() {
-    localStorage.removeItem('corre_potengi_orders_meta');
     try {
+      // 1. Limpa totalmente da Nuvem (Firebase)
+      const cloudUrl = getCloudDatabaseUrl();
+      if (cloudUrl) {
+        try {
+          await fetch(`${cloudUrl}/orders.json`, { method: 'DELETE' });
+        } catch (err) {
+          console.warn('Erro ao limpar nuvem:', err);
+        }
+      }
+
+      // 2. Remove do localStorage
+      localStorage.removeItem('corre_potengi_orders_meta');
+
+      // 3. Remove do IndexedDB
       const db = await openGestorDB();
       if (db) {
         const tx = db.transaction(STORE_NAME, 'readwrite');
@@ -1302,15 +1326,17 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     managerOrdersList.querySelectorAll('.btn-delete-order').forEach(btn => {
-      btn.addEventListener('click', async () => {
+      btn.addEventListener('click', async (e) => {
+        e.stopPropagation();
         const id = btn.getAttribute('data-id');
-        if (confirm('Deseja realmente remover este pedido da listagem do gestor?')) {
-          await deleteOrderFromDB(id);
+        if (confirm('Deseja realmente remover este pedido da listagem do gestor e da nuvem?')) {
           currentLoadedOrders = currentLoadedOrders.filter(o => o.id !== id);
           renderMetrics(currentLoadedOrders);
           renderSizeSummary(currentLoadedOrders);
           renderOrdersList();
-          showManagerToast('Pedido removido.');
+          showManagerToast('Excluindo pedido da nuvem...');
+          await deleteOrderFromDB(id);
+          showManagerToast('Pedido removido com sucesso.');
         }
       });
     });
@@ -1518,10 +1544,14 @@ document.addEventListener('DOMContentLoaded', () => {
      -------------------------------------------------- */
   if (btnClearAllOrders) {
     btnClearAllOrders.addEventListener('click', async () => {
-      if (confirm('Tem certeza que deseja apagar TODOS os pedidos do banco de dados do gestor? Esta ação não pode ser desfeita.')) {
+      if (confirm('Tem certeza que deseja apagar TODOS os pedidos do banco de dados do gestor e da nuvem? Esta ação não pode ser desfeita.')) {
+        showManagerToast('Limpando todo o histórico da nuvem...');
         await clearAllOrdersFromDB();
-        await loadAndRenderDashboard();
-        showManagerToast('🗑️ Histórico limpo com sucesso.');
+        currentLoadedOrders = [];
+        renderMetrics(currentLoadedOrders);
+        renderSizeSummary(currentLoadedOrders);
+        renderOrdersList();
+        showManagerToast('🗑️ Histórico totalmente limpo na nuvem e no dispositivo.');
       }
     });
   }
