@@ -23,8 +23,8 @@
     <!-- Top Sticky Header (SOMENTE LOGO E NOME CORRE POTENGI) -->
     <header class="site-header" id="mainHeader">
       <div class="header-inner">
-        <a href="#hero" class="brand-link" aria-label="Corre Potengi Início">
-          <img src="assets/LOGO%20CORRE.PNG" alt="CORRE POTENGI" class="header-logo" width="130" height="54">
+        <a href="#hero" class="brand-link" id="headerBrandLink" aria-label="Corre Potengi Início">
+          <img src="assets/LOGO%20CORRE.PNG" alt="CORRE POTENGI" class="header-logo" id="headerBrandLogo" width="130" height="54">
           <span class="header-brand-title">CORRE POTENGI</span>
         </a>
 
@@ -661,8 +661,8 @@
     <footer class="site-footer">
       <div class="footer-inner">
         <!-- Logo Oficial CORRE POTENGI -->
-        <div class="footer-logo-wrap">
-          <img src="assets/LOGO%20CORRE.PNG" alt="CORRE POTENGI" class="footer-logo" width="150" height="62" loading="lazy">
+        <div class="footer-logo-wrap" id="footerLogoWrap">
+          <img src="assets/LOGO%20CORRE.PNG" alt="CORRE POTENGI" class="footer-logo" id="footerBrandLogo" width="150" height="62" loading="lazy">
         </div>
 
         <h3 class="footer-proclamation">“EU FAÇO PARTE DO CORRE POTENGI.”</h3>
@@ -813,6 +813,147 @@
       </div>
     </div>
   </div>
+
+  <!-- ==============================================
+       PAINEL DO GESTOR (ATIVADO POR 3 CLIQUES NA LOGO)
+       ============================================== -->
+  <div class="manager-backdrop" id="managerDashboardModal" aria-hidden="true">
+    <div class="manager-modal-card">
+      
+      <!-- Topo do Painel -->
+      <div class="manager-modal-header">
+        <div class="manager-brand-badge">
+          <div class="manager-badge-pill">
+            <span class="pulsing-dot-green"></span>
+            <span>PAINEL DO GESTOR OFICIAL</span>
+          </div>
+          <h3 class="manager-title">CONTROLE DE PEDIDOS & COMPROVANTES</h3>
+          <p class="manager-subtitle">Clientes separados por nome, tamanho e WhatsApp em tempo real</p>
+        </div>
+        <button type="button" class="manager-close-btn" id="closeManagerBtn" aria-label="Fechar Painel">✕</button>
+      </div>
+
+      <!-- Barra de Ações Rápidas -->
+      <div class="manager-actions-bar">
+        <button type="button" class="btn-manager-action btn-export" id="btnExportOrdersCsv">
+          <span class="btn-action-icon">📥</span>
+          <span>Exportar Planilha (CSV)</span>
+        </button>
+        <button type="button" class="btn-manager-action btn-test" id="btnAddTestOrder">
+          <span class="btn-action-icon">🧪</span>
+          <span>Simular Pedido Teste</span>
+        </button>
+        <button type="button" class="btn-manager-action btn-clear" id="btnClearAllOrders">
+          <span class="btn-action-icon">🗑️</span>
+          <span>Limpar Histórico</span>
+        </button>
+      </div>
+
+      <!-- Cards de Métricas Gerais -->
+      <div class="manager-metrics-grid">
+        <div class="manager-metric-card">
+          <span class="metric-label">TOTAL CLIENTES</span>
+          <span class="metric-value" id="metricTotalCustomers">0</span>
+          <span class="metric-sub">compradores registrados</span>
+        </div>
+        <div class="manager-metric-card">
+          <span class="metric-label">CAMISAS VENDIDAS</span>
+          <span class="metric-value text-accent" id="metricTotalShirts">0</span>
+          <span class="metric-sub">unidades no total</span>
+        </div>
+        <div class="manager-metric-card">
+          <span class="metric-label">FATURAMENTO TOTAL</span>
+          <span class="metric-value text-neon" id="metricTotalRevenue">R$ 0,00</span>
+          <span class="metric-sub">valor pago via PIX</span>
+        </div>
+        <div class="manager-metric-card">
+          <span class="metric-label">COMPROVANTES</span>
+          <span class="metric-value" id="metricTotalReceipts">0</span>
+          <span class="metric-sub">anexos recebidos</span>
+        </div>
+      </div>
+
+      <!-- Resumo de Produção por Tamanho -->
+      <div class="manager-section-box">
+        <div class="manager-section-header">
+          <div class="sec-title-wrap">
+            <span class="sec-icon">👕</span>
+            <h4 class="manager-section-title">CONTAGEM POR TAMANHO (CONFECÇÃO)</h4>
+          </div>
+          <span class="sec-hint" id="managerSizeSummaryHint">Quantidades exatas para fabricação</span>
+        </div>
+        <div class="size-summary-grid" id="managerSizeSummaryGrid">
+          <!-- Gerado dinamicamente: Ex: Tamanho M: X un | Tamanho G: Y un -->
+        </div>
+      </div>
+
+      <!-- Filtros e Busca Rápida de Clientes -->
+      <div class="manager-filter-bar">
+        <div class="manager-search-box">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          <input type="text" id="managerSearchInput" placeholder="Buscar por nome do cliente ou número de WhatsApp...">
+          <button type="button" class="btn-clear-search hidden" id="btnClearSearch">✕</button>
+        </div>
+        
+        <div class="manager-filter-pills">
+          <div class="filter-group">
+            <span class="filter-group-label">Tamanho:</span>
+            <div class="filter-buttons" id="managerSizeFilterButtons">
+              <button type="button" class="filter-btn active" data-filter-size="ALL">TODOS</button>
+              <button type="button" class="filter-btn" data-filter-size="M">M</button>
+              <button type="button" class="filter-btn" data-filter-size="G">G</button>
+            </div>
+          </div>
+          
+          <div class="filter-group">
+            <span class="filter-group-label">Comprovante:</span>
+            <div class="filter-buttons" id="managerReceiptFilterButtons">
+              <button type="button" class="filter-btn active" data-filter-receipt="ALL">TODOS</button>
+              <button type="button" class="filter-btn" data-filter-receipt="WITH">COM ANEXO</button>
+              <button type="button" class="filter-btn" data-filter-receipt="WITHOUT">SEM ANEXO</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Lista Detalhada de Clientes & Comprovantes -->
+      <div class="manager-orders-container">
+        <div class="manager-orders-header-row">
+          <span class="orders-count-label" id="managerOrdersCountLabel">0 pedidos listados</span>
+          <span class="orders-hint-label">Clique no WhatsApp para falar direto ou no comprovante para ampliar</span>
+        </div>
+        <div class="manager-orders-list" id="managerOrdersList">
+          <!-- Cards de clientes gerados dinamicamente via JS -->
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Modal Zoom do Comprovante (Lightroom) -->
+  <div class="receipt-zoom-backdrop" id="receiptZoomModal" aria-hidden="true">
+    <div class="receipt-zoom-card">
+      <div class="receipt-zoom-header">
+        <div class="zoom-header-info">
+          <span class="zoom-badge">📎 COMPROVANTE OFICIAL</span>
+          <h5 class="receipt-zoom-title" id="receiptZoomTitle">Comprovante PIX</h5>
+          <span class="receipt-zoom-meta" id="receiptZoomMeta">Cliente: -</span>
+        </div>
+        <div class="receipt-zoom-actions">
+          <a href="#" class="btn-zoom-download" id="receiptZoomDownloadBtn" download="comprovante.jpg">
+            <span>📥 Baixar Arquivo</span>
+          </a>
+          <button type="button" class="receipt-zoom-close" id="closeReceiptZoomBtn" aria-label="Fechar visualizador">✕</button>
+        </div>
+      </div>
+      <div class="receipt-zoom-content" id="receiptZoomContent">
+        <!-- Imagem ou iframe de PDF inserido dinamicamente -->
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast Notificação do Gestor -->
+  <div class="manager-toast" id="managerToast" aria-live="polite"></div>
 
   <script src="script.js"></script>
 </body>

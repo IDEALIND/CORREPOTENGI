@@ -343,7 +343,147 @@ document.addEventListener('DOMContentLoaded', () => {
   setupCopyKeyButton('btnCopyPixModal');
 
   /* --------------------------------------------------
-     9. UPLOAD DO COMPROVANTE DE PAGAMENTO
+     9. BANCO DE DADOS LOCAL DO GESTOR (INDEXEDDB + LOCALSTORAGE)
+     Armazena pedidos e fotos dos comprovantes em alta resolução
+     -------------------------------------------------- */
+  const DB_NAME = 'CorrePotengiGestorDB';
+  const DB_VERSION = 1;
+  const STORE_NAME = 'orders';
+
+  let currentReceiptDataUrl = null;
+  let currentReceiptFileName = '';
+  let currentReceiptFileType = '';
+
+  function openGestorDB() {
+    return new Promise((resolve, reject) => {
+      if (!window.indexedDB) {
+        resolve(null);
+        return;
+      }
+      const request = indexedDB.open(DB_NAME, DB_VERSION);
+      request.onupgradeneeded = (e) => {
+        const db = e.target.result;
+        if (!db.objectStoreNames.contains(STORE_NAME)) {
+          const store = db.createObjectStore(STORE_NAME, { keyPath: 'id' });
+          store.createIndex('createdAt', 'createdAt', { unique: false });
+          store.createIndex('customerPhone', 'customerPhone', { unique: false });
+          store.createIndex('size', 'size', { unique: false });
+        }
+      };
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => resolve(null);
+    });
+  }
+
+  function saveMetaBackup(order) {
+    try {
+      const raw = localStorage.getItem('corre_potengi_orders_meta');
+      let list = raw ? JSON.parse(raw) : [];
+      list = list.filter(item => item.id !== order.id);
+      // Salva uma cópia leve no localStorage (sem o DataURL gigantesco se for muito pesado)
+      const lightweight = { ...order };
+      if (lightweight.receiptDataUrl && lightweight.receiptDataUrl.length > 80000) {
+        lightweight.receiptDataUrlStoredInDB = true;
+        lightweight.receiptDataUrl = null;
+      }
+      list.unshift(lightweight);
+      localStorage.setItem('corre_potengi_orders_meta', JSON.stringify(list));
+    } catch (e) {
+      console.warn('Backup local storage avisou:', e);
+    }
+  }
+
+  function getMetaBackup() {
+    try {
+      const raw = localStorage.getItem('corre_potengi_orders_meta');
+      return raw ? JSON.parse(raw) : [];
+    } catch (e) {
+      return [];
+    }
+  }
+
+  async function saveOrderToDB(order) {
+    saveMetaBackup(order);
+    try {
+      const db = await openGestorDB();
+      if (!db) return true;
+      return new Promise((resolve) => {
+        const tx = db.transaction(STORE_NAME, 'readwrite');
+        const store = tx.objectStore(STORE_NAME);
+        store.put(order);
+        tx.oncomplete = () => resolve(true);
+        tx.onerror = () => resolve(false);
+      });
+    } catch (e) {
+      console.warn('Erro ao salvar no IndexedDB:', e);
+      return true;
+    }
+  }
+
+  async function getAllOrdersFromDB() {
+    try {
+      const db = await openGestorDB();
+      if (!db) return getMetaBackup();
+      return new Promise((resolve) => {
+        const tx = db.transaction(STORE_NAME, 'readonly');
+        const store = tx.objectStore(STORE_NAME);
+        const request = store.getAll();
+        request.onsuccess = () => {
+          let list = request.result || [];
+          if (list.length === 0) {
+            list = getMetaBackup();
+          }
+          list.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+          resolve(list);
+        };
+        request.onerror = () => resolve(getMetaBackup());
+      });
+    } catch (e) {
+      return getMetaBackup();
+    }
+  }
+
+  async function deleteOrderFromDB(id) {
+    try {
+      // Remove do localStorage
+      const raw = localStorage.getItem('corre_potengi_orders_meta');
+      if (raw) {
+        let list = JSON.parse(raw).filter(item => item.id !== id);
+        localStorage.setItem('corre_potengi_orders_meta', JSON.stringify(list));
+      }
+
+      const db = await openGestorDB();
+      if (db) {
+        const tx = db.transaction(STORE_NAME, 'readwrite');
+        tx.objectStore(STORE_NAME).delete(id);
+      }
+    } catch (e) {}
+  }
+
+  async function clearAllOrdersFromDB() {
+    localStorage.removeItem('corre_potengi_orders_meta');
+    try {
+      const db = await openGestorDB();
+      if (db) {
+        const tx = db.transaction(STORE_NAME, 'readwrite');
+        tx.objectStore(STORE_NAME).clear();
+      }
+    } catch (e) {}
+  }
+
+  async function updateOrderStatusInDB(id, newStatus) {
+    try {
+      const orders = await getAllOrdersFromDB();
+      const target = orders.find(o => o.id === id);
+      if (target) {
+        target.status = newStatus;
+        await saveOrderToDB(target);
+      }
+    } catch (e) {}
+  }
+
+  /* --------------------------------------------------
+     10. UPLOAD DO COMPROVANTE DE PAGAMENTO & AUTO-REGISTRO
      -------------------------------------------------- */
   const receiptFileInput = document.getElementById('receiptFileInput');
   const dropzonePrompt = document.getElementById('dropzonePrompt');
@@ -355,10 +495,26 @@ document.addEventListener('DOMContentLoaded', () => {
     receiptFileInput.addEventListener('change', (e) => {
       const file = e.target.files[0];
       if (file) {
+        currentReceiptFileName = file.name;
+        currentReceiptFileType = file.type || '';
         state.receiptFileName = file.name;
         selectedFilename.textContent = file.name;
         dropzonePrompt.classList.add('hidden');
         dropzoneSelected.classList.remove('hidden');
+
+        // Lê a imagem/PDF em Base64 para armazenar no painel do gestor
+        const reader = new FileReader();
+        reader.onload = (event) => {
+          currentReceiptDataUrl = event.target.result;
+          
+          // Se o cliente já preencheu nome e telefone, pré-grava no painel
+          const custName = document.getElementById('directCustName')?.value.trim();
+          const custPhone = document.getElementById('directCustPhone')?.value.trim();
+          if (custName && custPhone) {
+            autoRecordOrderDraft(custName, custPhone);
+          }
+        };
+        reader.readAsDataURL(file);
       }
     });
   }
@@ -367,19 +523,45 @@ document.addEventListener('DOMContentLoaded', () => {
     btnRemoveFile.addEventListener('click', (e) => {
       e.stopPropagation();
       receiptFileInput.value = '';
+      currentReceiptDataUrl = null;
+      currentReceiptFileName = '';
+      currentReceiptFileType = '';
       state.receiptFileName = '';
       dropzonePrompt.classList.remove('hidden');
       dropzoneSelected.classList.add('hidden');
     });
   }
 
+  async function autoRecordOrderDraft(custName, custPhone) {
+    const draftId = 'draft_' + custPhone.replace(/\D/g, '');
+    const draft = {
+      id: draftId,
+      customerName: custName,
+      customerPhone: custPhone,
+      size: state.size || 'M',
+      quantity: state.quantity || 1,
+      total: calculateFormattedTotal(),
+      totalRaw: calculateRawTotal(),
+      pickupLocation: state.pickupLocation,
+      timestamp: Date.now(),
+      displayDate: new Date().toLocaleDateString('pt-BR'),
+      displayTime: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+      hasReceipt: !!currentReceiptDataUrl,
+      receiptFileName: currentReceiptFileName || 'comprovante.jpg',
+      receiptFileType: currentReceiptFileType,
+      receiptDataUrl: currentReceiptDataUrl,
+      status: 'Confirmado'
+    };
+    await saveOrderToDB(draft);
+  }
+
   /* --------------------------------------------------
-     10. ENVIO DO PEDIDO PARA O WHATSAPP COM COMPROVANTE
+     11. ENVIO DO PEDIDO PARA O WHATSAPP & GRAVAÇÃO NO PAINEL
      -------------------------------------------------- */
   const submitOrderBtn = document.getElementById('submitOrderBtn');
 
   if (submitOrderBtn) {
-    submitOrderBtn.addEventListener('click', () => {
+    submitOrderBtn.addEventListener('click', async () => {
       const custName = document.getElementById('directCustName')?.value.trim();
       const custPhone = document.getElementById('directCustPhone')?.value.trim();
 
@@ -397,6 +579,29 @@ document.addEventListener('DOMContentLoaded', () => {
 
       const total = calculateFormattedTotal();
 
+      // Grava no Painel do Gestor imediatamente
+      const orderRecord = {
+        id: 'PED_' + Date.now() + '_' + Math.floor(Math.random() * 1000),
+        customerName: custName,
+        customerPhone: custPhone,
+        size: state.size || 'M',
+        quantity: state.quantity || 1,
+        total: total,
+        totalRaw: calculateRawTotal(),
+        pickupLocation: state.pickupLocation,
+        timestamp: Date.now(),
+        displayDate: new Date().toLocaleDateString('pt-BR'),
+        displayTime: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+        hasReceipt: !!currentReceiptDataUrl,
+        receiptFileName: currentReceiptFileName || state.receiptFileName || '',
+        receiptFileType: currentReceiptFileType,
+        receiptDataUrl: currentReceiptDataUrl || null,
+        status: 'Confirmado'
+      };
+
+      await saveOrderToDB(orderRecord);
+
+      // Mensagem para o WhatsApp
       let msg = `🏃 *PEDIDO OFICIAL - CORRE POTENGI 2026*\n\n`;
       msg += `Olá! Realizei o pagamento via PIX e quero confirmar minha camisa oficial:\n\n`;
       msg += `👕 *Produto:* Camisa Oficial Corre Potengi (UNISSEX)\n`;
@@ -423,6 +628,570 @@ document.addEventListener('DOMContentLoaded', () => {
       const encodedMsg = encodeURIComponent(msg);
       const whatsappUrl = `https://wa.me/${WHATSAPP_NUMBER}?text=${encodedMsg}`;
       window.open(whatsappUrl, '_blank');
+    });
+  }
+
+  /* --------------------------------------------------
+     12. GATILHO SECRETO: 3 CLIQUES NA LOGO ABRE O PAINEL DO GESTOR
+     -------------------------------------------------- */
+  const managerDashboardModal = document.getElementById('managerDashboardModal');
+  const closeManagerBtn = document.getElementById('closeManagerBtn');
+  const headerBrandLink = document.getElementById('headerBrandLink');
+  const headerBrandLogo = document.getElementById('headerBrandLogo');
+  const footerBrandLogo = document.getElementById('footerBrandLogo');
+  const footerLogoWrap = document.getElementById('footerLogoWrap');
+  const managerToast = document.getElementById('managerToast');
+
+  let logoClickCount = 0;
+  let logoClickTimer = null;
+
+  function showManagerToast(text) {
+    if (!managerToast) return;
+    managerToast.textContent = text;
+    managerToast.classList.add('show');
+    setTimeout(() => {
+      managerToast.classList.remove('show');
+    }, 2800);
+  }
+
+  function handleLogoClick(e) {
+    logoClickCount++;
+    clearTimeout(logoClickTimer);
+
+    if (logoClickCount === 3) {
+      e.preventDefault();
+      e.stopPropagation();
+      logoClickCount = 0;
+      showManagerToast('⚡ Acesso Gestor: Carregando Painel de Pedidos...');
+      openManagerDashboard();
+    } else {
+      logoClickTimer = setTimeout(() => {
+        logoClickCount = 0;
+      }, 1600); // 1.6 segundos para completar os 3 cliques
+    }
+  }
+
+  // Ouvinte na logo do cabeçalho e rodapé
+  if (headerBrandLink) headerBrandLink.addEventListener('click', handleLogoClick);
+  if (headerBrandLogo) headerBrandLogo.addEventListener('click', handleLogoClick);
+  if (footerBrandLogo) footerBrandLogo.addEventListener('click', handleLogoClick);
+  if (footerLogoWrap) footerLogoWrap.addEventListener('click', handleLogoClick);
+
+  function openManagerDashboard() {
+    if (!managerDashboardModal) return;
+    managerDashboardModal.classList.add('open');
+    managerDashboardModal.setAttribute('aria-hidden', 'false');
+    loadAndRenderDashboard();
+  }
+
+  function closeManagerDashboard() {
+    if (!managerDashboardModal) return;
+    managerDashboardModal.classList.remove('open');
+    managerDashboardModal.setAttribute('aria-hidden', 'true');
+  }
+
+  if (closeManagerBtn) closeManagerBtn.addEventListener('click', closeManagerDashboard);
+
+  if (managerDashboardModal) {
+    managerDashboardModal.addEventListener('click', (e) => {
+      if (e.target === managerDashboardModal) closeManagerDashboard();
+    });
+  }
+
+  window.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && managerDashboardModal && managerDashboardModal.classList.contains('open')) {
+      closeManagerDashboard();
+    }
+  });
+
+  /* --------------------------------------------------
+     13. RENDERIZAÇÃO DO PAINEL DO GESTOR & FILTROS
+     -------------------------------------------------- */
+  const metricTotalCustomers = document.getElementById('metricTotalCustomers');
+  const metricTotalShirts = document.getElementById('metricTotalShirts');
+  const metricTotalRevenue = document.getElementById('metricTotalRevenue');
+  const metricTotalReceipts = document.getElementById('metricTotalReceipts');
+  const managerSizeSummaryGrid = document.getElementById('managerSizeSummaryGrid');
+  const managerOrdersList = document.getElementById('managerOrdersList');
+  const managerOrdersCountLabel = document.getElementById('managerOrdersCountLabel');
+  const managerSearchInput = document.getElementById('managerSearchInput');
+  const btnClearSearch = document.getElementById('btnClearSearch');
+  const btnExportOrdersCsv = document.getElementById('btnExportOrdersCsv');
+  const btnAddTestOrder = document.getElementById('btnAddTestOrder');
+  const btnClearAllOrders = document.getElementById('btnClearAllOrders');
+
+  let currentLoadedOrders = [];
+  let activeFilterSize = 'ALL';
+  let activeFilterReceipt = 'ALL';
+  let activeSearchQuery = '';
+
+  async function loadAndRenderDashboard() {
+    currentLoadedOrders = await getAllOrdersFromDB();
+    renderMetrics(currentLoadedOrders);
+    renderSizeSummary(currentLoadedOrders);
+    renderOrdersList();
+  }
+
+  function renderMetrics(orders) {
+    const totalCustomers = orders.length;
+    let totalShirts = 0;
+    let totalRevenueRaw = 0;
+    let totalReceipts = 0;
+
+    orders.forEach(o => {
+      const q = Number(o.quantity) || 1;
+      totalShirts += q;
+      totalRevenueRaw += (o.totalRaw ? Number(o.totalRaw) : (q * 49.99));
+      if (o.hasReceipt || o.receiptDataUrl) totalReceipts++;
+    });
+
+    if (metricTotalCustomers) metricTotalCustomers.textContent = totalCustomers;
+    if (metricTotalShirts) metricTotalShirts.textContent = totalShirts;
+    if (metricTotalRevenue) metricTotalRevenue.textContent = `R$ ${totalRevenueRaw.toFixed(2).replace('.', ',')}`;
+    if (metricTotalReceipts) metricTotalReceipts.textContent = totalReceipts;
+  }
+
+  function renderSizeSummary(orders) {
+    if (!managerSizeSummaryGrid) return;
+    managerSizeSummaryGrid.innerHTML = '';
+
+    // Agrupa e conta por tamanho
+    const counts = {};
+    let totalPieces = 0;
+
+    orders.forEach(o => {
+      const s = (o.size || 'M').toUpperCase();
+      const q = Number(o.quantity) || 1;
+      counts[s] = (counts[s] || 0) + q;
+      totalPieces += q;
+    });
+
+    // Se estiver vazio, garante pelo menos os tamanhos padrões M e G visíveis
+    if (Object.keys(counts).length === 0) {
+      counts['M'] = 0;
+      counts['G'] = 0;
+    }
+
+    const sizes = Object.keys(counts).sort();
+
+    sizes.forEach(sz => {
+      const count = counts[sz];
+      const pct = totalPieces > 0 ? Math.round((count / totalPieces) * 100) : 0;
+
+      const item = document.createElement('div');
+      item.className = 'size-summary-item';
+      item.innerHTML = `
+        <span class="size-item-tag">TAM ${sz}</span>
+        <div class="size-item-details">
+          <div class="size-item-qty">${count} un.</div>
+          <div class="size-item-pct">${pct}% da produção</div>
+        </div>
+      `;
+      managerSizeSummaryGrid.appendChild(item);
+    });
+  }
+
+  function renderOrdersList() {
+    if (!managerOrdersList) return;
+    managerOrdersList.innerHTML = '';
+
+    // Filtra lista de pedidos
+    let filtered = currentLoadedOrders.filter(order => {
+      // Filtro de tamanho
+      if (activeFilterSize !== 'ALL') {
+        if ((order.size || '').toUpperCase() !== activeFilterSize) return false;
+      }
+      // Filtro de comprovante
+      if (activeFilterReceipt === 'WITH') {
+        if (!order.hasReceipt && !order.receiptDataUrl) return false;
+      } else if (activeFilterReceipt === 'WITHOUT') {
+        if (order.hasReceipt || order.receiptDataUrl) return false;
+      }
+      // Filtro de busca (Nome ou Telefone)
+      if (activeSearchQuery) {
+        const query = activeSearchQuery.toLowerCase();
+        const name = (order.customerName || '').toLowerCase();
+        const phone = (order.customerPhone || '').toLowerCase();
+        if (!name.includes(query) && !phone.includes(query)) return false;
+      }
+      return true;
+    });
+
+    if (managerOrdersCountLabel) {
+      managerOrdersCountLabel.textContent = `${filtered.length} de ${currentLoadedOrders.length} pedido(s) listado(s)`;
+    }
+
+    if (filtered.length === 0) {
+      managerOrdersList.innerHTML = `
+        <div class="manager-empty-state">
+          <span class="empty-icon">📋</span>
+          <h5 class="empty-title">Nenhum pedido encontrado</h5>
+          <p class="empty-sub">
+            ${currentLoadedOrders.length === 0 
+              ? 'Ainda não há pedidos registrados. Assim que os clientes comprarem e anexarem o comprovante, eles aparecerão aqui automaticamente!' 
+              : 'Nenhum resultado corresponde aos filtros selecionados acima.'}
+          </p>
+        </div>
+      `;
+      return;
+    }
+
+    filtered.forEach(order => {
+      const card = document.createElement('div');
+      card.className = 'order-card';
+
+      const initial = (order.customerName ? order.customerName.charAt(0) : 'C').toUpperCase();
+      const statusClass = (order.status || 'Confirmado').toLowerCase();
+      const cleanPhone = (order.customerPhone || '').replace(/\D/g, '');
+      const waNumber = cleanPhone.startsWith('55') ? cleanPhone : ('55' + cleanPhone);
+      const isPdf = (order.receiptFileType || '').includes('pdf') || (order.receiptFileName || '').toLowerCase().endsWith('.pdf');
+
+      // Área do Comprovante
+      let receiptHtml = '';
+      if (order.receiptDataUrl) {
+        if (isPdf) {
+          receiptHtml = `
+            <div class="order-receipt-col">
+              <div class="order-receipt-info">
+                <span class="order-receipt-status-text">📄 PDF do Comprovante</span>
+                <span class="order-receipt-filename">${order.receiptFileName || 'comprovante.pdf'}</span>
+                <div class="order-receipt-actions">
+                  <button type="button" class="btn-view-receipt btn-zoom-action" data-id="${order.id}">Abrir PDF</button>
+                </div>
+              </div>
+            </div>
+          `;
+        } else {
+          receiptHtml = `
+            <div class="order-receipt-col">
+              <div class="order-receipt-thumb-wrap btn-zoom-action" data-id="${order.id}">
+                <img src="${order.receiptDataUrl}" alt="Comprovante" class="order-receipt-thumb">
+                <span class="receipt-thumb-badge">🔍</span>
+              </div>
+              <div class="order-receipt-info">
+                <span class="order-receipt-status-text">✓ Comprovante Anexado</span>
+                <span class="order-receipt-filename">${order.receiptFileName || 'comprovante.jpg'}</span>
+                <div class="order-receipt-actions">
+                  <button type="button" class="btn-view-receipt btn-zoom-action" data-id="${order.id}">Ver Foto</button>
+                  <a href="${order.receiptDataUrl}" download="${order.receiptFileName || 'comprovante.jpg'}" class="btn-view-receipt">Baixar</a>
+                </div>
+              </div>
+            </div>
+          `;
+        }
+      } else if (order.hasReceipt) {
+        receiptHtml = `
+          <div class="order-receipt-col">
+            <div class="order-receipt-info">
+              <span class="order-receipt-status-text">📎 Comprovante Registrado</span>
+              <span class="order-receipt-filename">${order.receiptFileName || 'comprovante.jpg'}</span>
+            </div>
+          </div>
+        `;
+      } else {
+        receiptHtml = `
+          <div class="order-receipt-col">
+            <div class="no-receipt-warning">
+              <span>⚠️ Sem anexo de comprovante</span>
+            </div>
+          </div>
+        `;
+      }
+
+      card.innerHTML = `
+        <div class="order-card-header">
+          <div class="order-customer-info">
+            <div class="order-cust-avatar">${initial}</div>
+            <div class="order-cust-name-row">
+              <span class="order-cust-name">${order.customerName || 'Cliente Anônimo'}</span>
+              <span class="order-date-badge">🗓️ ${order.displayDate || ''} às ${order.displayTime || ''}</span>
+            </div>
+          </div>
+          <div class="order-tags-wrap">
+            <span class="order-size-badge">TAM: ${order.size || 'M'}</span>
+            <span class="order-status-badge status-${statusClass}" data-id="${order.id}" title="Clique para alternar status">
+              ${order.status || 'Confirmado'}
+            </span>
+          </div>
+        </div>
+
+        <div class="order-card-body">
+          <div class="order-details-col">
+            <div class="order-detail-line">
+              <span>📱 <strong>WhatsApp:</strong> ${order.customerPhone || 'Não informado'}</span>
+            </div>
+            ${cleanPhone ? `
+              <a href="https://wa.me/${waNumber}?text=${encodeURIComponent(`Olá ${order.customerName}, aqui é da organização do Corre Potengi referente ao seu pedido da camisa!`)}" target="_blank" class="btn-whatsapp-direct">
+                <span>💬 Chamar no WhatsApp</span>
+              </a>
+            ` : ''}
+            <div class="order-detail-line" style="margin-top: 4px;">
+              <span>👕 <strong>Qtd:</strong> ${order.quantity || 1} un.</span>
+              <span>•</span>
+              <span>💰 <strong>Total:</strong> R$ ${order.total || '49,99'}</span>
+            </div>
+            <div class="order-detail-line">
+              <span>📍 Retirada: SCOFIELD</span>
+            </div>
+          </div>
+
+          ${receiptHtml}
+        </div>
+
+        <div class="order-card-footer">
+          <span>ID: ${order.id}</span>
+          <button type="button" class="btn-delete-order" data-id="${order.id}">
+            <span>🗑️ Excluir</span>
+          </button>
+        </div>
+      `;
+
+      managerOrdersList.appendChild(card);
+    });
+
+    // Eventos dentro dos cards (Zoom, Status, Excluir)
+    managerOrdersList.querySelectorAll('.btn-zoom-action').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const id = btn.getAttribute('data-id');
+        const found = currentLoadedOrders.find(o => o.id === id);
+        if (found && found.receiptDataUrl) {
+          openReceiptZoom(found);
+        }
+      });
+    });
+
+    managerOrdersList.querySelectorAll('.order-status-badge').forEach(badge => {
+      badge.addEventListener('click', async () => {
+        const id = badge.getAttribute('data-id');
+        const found = currentLoadedOrders.find(o => o.id === id);
+        if (!found) return;
+
+        let nextStatus = 'Confirmado';
+        if (found.status === 'Confirmado') nextStatus = 'Entregue';
+        else if (found.status === 'Entregue') nextStatus = 'Pendente';
+        else nextStatus = 'Confirmado';
+
+        found.status = nextStatus;
+        await updateOrderStatusInDB(id, nextStatus);
+        renderOrdersList();
+      });
+    });
+
+    managerOrdersList.querySelectorAll('.btn-delete-order').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const id = btn.getAttribute('data-id');
+        if (confirm('Deseja realmente remover este pedido da listagem do gestor?')) {
+          await deleteOrderFromDB(id);
+          currentLoadedOrders = currentLoadedOrders.filter(o => o.id !== id);
+          renderMetrics(currentLoadedOrders);
+          renderSizeSummary(currentLoadedOrders);
+          renderOrdersList();
+          showManagerToast('Pedido removido.');
+        }
+      });
+    });
+  }
+
+  // Filtro de Tamanho (TODOS, M, G)
+  const sizeFilterBtns = document.querySelectorAll('#managerSizeFilterButtons .filter-btn');
+  sizeFilterBtns.forEach(btn => {
+    btn.addEventListener('click', () => {
+      sizeFilterBtns.forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      activeFilterSize = btn.getAttribute('data-filter-size');
+      renderOrdersList();
+    });
+  });
+
+  // Filtro de Comprovante (TODOS, COM ANEXO, SEM ANEXO)
+  const receiptFilterBtns = document.querySelectorAll('#managerReceiptFilterButtons .filter-btn');
+  receiptFilterBtns.forEach(btn => {
+    btn.addEventListener('click', () => {
+      receiptFilterBtns.forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      activeFilterReceipt = btn.getAttribute('data-filter-receipt');
+      renderOrdersList();
+    });
+  });
+
+  // Busca em tempo real por Nome ou WhatsApp
+  if (managerSearchInput) {
+    managerSearchInput.addEventListener('input', (e) => {
+      activeSearchQuery = e.target.value.trim();
+      if (btnClearSearch) {
+        if (activeSearchQuery) btnClearSearch.classList.remove('hidden');
+        else btnClearSearch.classList.add('hidden');
+      }
+      renderOrdersList();
+    });
+  }
+
+  if (btnClearSearch) {
+    btnClearSearch.addEventListener('click', () => {
+      managerSearchInput.value = '';
+      activeSearchQuery = '';
+      btnClearSearch.classList.add('hidden');
+      renderOrdersList();
+    });
+  }
+
+  /* --------------------------------------------------
+     14. MODAL DE ZOOM DO COMPROVANTE (LIGHTROOM)
+     -------------------------------------------------- */
+  const receiptZoomModal = document.getElementById('receiptZoomModal');
+  const closeReceiptZoomBtn = document.getElementById('closeReceiptZoomBtn');
+  const receiptZoomContent = document.getElementById('receiptZoomContent');
+  const receiptZoomMeta = document.getElementById('receiptZoomMeta');
+  const receiptZoomTitle = document.getElementById('receiptZoomTitle');
+  const receiptZoomDownloadBtn = document.getElementById('receiptZoomDownloadBtn');
+
+  function openReceiptZoom(order) {
+    if (!receiptZoomModal || !receiptZoomContent) return;
+
+    const isPdf = (order.receiptFileType || '').includes('pdf') || (order.receiptFileName || '').toLowerCase().endsWith('.pdf');
+    receiptZoomMeta.textContent = `Cliente: ${order.customerName} • WhatsApp: ${order.customerPhone}`;
+    receiptZoomTitle.textContent = order.receiptFileName || 'Comprovante Oficial';
+
+    if (receiptZoomDownloadBtn) {
+      receiptZoomDownloadBtn.href = order.receiptDataUrl;
+      receiptZoomDownloadBtn.download = order.receiptFileName || (isPdf ? 'comprovante.pdf' : 'comprovante.jpg');
+    }
+
+    if (isPdf) {
+      receiptZoomContent.innerHTML = `<iframe src="${order.receiptDataUrl}" class="receipt-pdf-frame"></iframe>`;
+    } else {
+      receiptZoomContent.innerHTML = `<img src="${order.receiptDataUrl}" alt="Comprovante" class="receipt-zoom-img">`;
+    }
+
+    receiptZoomModal.classList.add('open');
+    receiptZoomModal.setAttribute('aria-hidden', 'false');
+  }
+
+  function closeReceiptZoom() {
+    if (!receiptZoomModal) return;
+    receiptZoomModal.classList.remove('open');
+    receiptZoomModal.setAttribute('aria-hidden', 'true');
+    if (receiptZoomContent) receiptZoomContent.innerHTML = '';
+  }
+
+  if (closeReceiptZoomBtn) closeReceiptZoomBtn.addEventListener('click', closeReceiptZoom);
+  if (receiptZoomModal) {
+    receiptZoomModal.addEventListener('click', (e) => {
+      if (e.target === receiptZoomModal) closeReceiptZoom();
+    });
+  }
+
+  /* --------------------------------------------------
+     15. EXPORTAR PLANILHA CSV (EXCEL / PRODUÇÃO)
+     -------------------------------------------------- */
+  if (btnExportOrdersCsv) {
+    btnExportOrdersCsv.addEventListener('click', () => {
+      if (currentLoadedOrders.length === 0) {
+        alert('Não há pedidos registrados para exportar.');
+        return;
+      }
+
+      // Monta o CSV com BOM UTF-8 para abrir com acentuação correta no Excel
+      let csvContent = '\uFEFF';
+      csvContent += 'Data;Hora;Nome do Cliente;WhatsApp / Telefone;Tamanho;Quantidade;Valor Total (R$);Possui Comprovante;Nome do Arquivo;Status\n';
+
+      currentLoadedOrders.forEach(o => {
+        const row = [
+          `"${o.displayDate || ''}"`,
+          `"${o.displayTime || ''}"`,
+          `"${(o.customerName || '').replace(/"/g, '""')}"`,
+          `"${(o.customerPhone || '').replace(/"/g, '""')}"`,
+          `"${o.size || 'M'}"`,
+          `"${o.quantity || 1}"`,
+          `"${o.total || '49,99'}"`,
+          `"${(o.hasReceipt || o.receiptDataUrl) ? 'Sim' : 'Não'}"`,
+          `"${(o.receiptFileName || '').replace(/"/g, '""')}"`,
+          `"${o.status || 'Confirmado'}"`
+        ];
+        csvContent += row.join(';') + '\n';
+      });
+
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `pedidos_corre_potengi_${new Date().toISOString().slice(0, 10)}.csv`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+      showManagerToast('📥 Planilha CSV exportada com sucesso!');
+    });
+  }
+
+  /* --------------------------------------------------
+     16. SIMULAÇÃO DE PEDIDO DE TESTE (DEMONSTRAÇÃO RÁPIDA)
+     -------------------------------------------------- */
+  if (btnAddTestOrder) {
+    btnAddTestOrder.addEventListener('click', async () => {
+      const demoNames = ['Lucas Medeiros', 'Mariana Costa', 'Gabriel Santana', 'Beatriz Lima', 'Thiago Araújo'];
+      const demoSizes = ['M', 'G', 'M', 'M', 'G'];
+      const randomIdx = Math.floor(Math.random() * demoNames.length);
+
+      // Cria um canvas pequeno simulando imagem de comprovante PIX
+      const canvas = document.createElement('canvas');
+      canvas.width = 400;
+      canvas.height = 300;
+      const ctx = canvas.getContext('2d');
+      ctx.fillStyle = '#081120';
+      ctx.fillRect(0, 0, 400, 300);
+      ctx.fillStyle = '#FF5500';
+      ctx.fillRect(0, 0, 400, 40);
+      ctx.fillStyle = '#FFFFFF';
+      ctx.font = 'bold 16px sans-serif';
+      ctx.fillText('COMPROVANTE DE PAGAMENTO PIX', 20, 26);
+      ctx.fillStyle = '#FFCC00';
+      ctx.font = 'bold 24px sans-serif';
+      ctx.fillText('R$ 49,99', 20, 90);
+      ctx.fillStyle = '#E5E7EB';
+      ctx.font = '14px sans-serif';
+      ctx.fillText(`Pagador: ${demoNames[randomIdx]}`, 20, 130);
+      ctx.fillText('Destinatário: Aylson Gabriel (Corre Potengi)', 20, 160);
+      ctx.fillText(`Data: ${new Date().toLocaleDateString('pt-BR')}`, 20, 190);
+      ctx.fillText('Status: TRANSFERÊNCIA REALIZADA COM SUCESSO', 20, 230);
+      const demoDataUrl = canvas.toDataURL('image/jpeg', 0.85);
+
+      const testOrder = {
+        id: 'TEST_' + Date.now(),
+        customerName: demoNames[randomIdx],
+        customerPhone: '(84) 9' + Math.floor(10000000 + Math.random() * 90000000),
+        size: demoSizes[randomIdx],
+        quantity: 1,
+        total: '49,99',
+        totalRaw: 49.99,
+        pickupLocation: state.pickupLocation,
+        timestamp: Date.now(),
+        displayDate: new Date().toLocaleDateString('pt-BR'),
+        displayTime: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+        hasReceipt: true,
+        receiptFileName: 'comprovante_pix_teste.jpg',
+        receiptFileType: 'image/jpeg',
+        receiptDataUrl: demoDataUrl,
+        status: 'Confirmado'
+      };
+
+      await saveOrderToDB(testOrder);
+      await loadAndRenderDashboard();
+      showManagerToast('🧪 Pedido de teste criado com sucesso!');
+    });
+  }
+
+  /* --------------------------------------------------
+     17. LIMPAR HISTÓRICO DE PEDIDOS
+     -------------------------------------------------- */
+  if (btnClearAllOrders) {
+    btnClearAllOrders.addEventListener('click', async () => {
+      if (confirm('Tem certeza que deseja apagar TODOS os pedidos do banco de dados do gestor? Esta ação não pode ser desfeita.')) {
+        await clearAllOrdersFromDB();
+        await loadAndRenderDashboard();
+        showManagerToast('🗑️ Histórico limpo com sucesso.');
+      }
     });
   }
 
