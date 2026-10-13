@@ -1,6 +1,6 @@
 /* ==========================================================================
    CORRE POTENGI - MOTOR DE COMPRA & E-COMMERCE MOBILE PIX
-   WhatsApp Oficial: (84) 99683-8268 | Chave PIX: 0fc3c151-a306-45d0-9197-937a46b42339
+   WhatsApp Oficial: (84) 99683-8268 | Chave PIX: bieldamidia.a@outlook.com
    ========================================================================== */
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -15,8 +15,9 @@ document.addEventListener('DOMContentLoaded', () => {
   };
 
   const WHATSAPP_NUMBER = '5584986286423';
-  const PIX_RANDOM_KEY = '0fc3c151-a306-45d0-9197-937a46b42339';
-  const PIX_BENEFICIARY = 'AYLSON GABRIEL DA SILVA PEREIRA (Banco Inter)';
+  const PIX_KEY = 'bieldamidia.a@outlook.com';
+  const PIX_RANDOM_KEY = PIX_KEY;
+  const PIX_BENEFICIARY = 'AYLSON GABRIEL DA SILVA PEREIRA';
 
   /* --------------------------------------------------
      GERADOR OFICIAL DO PADRÃO PIX BR CODE COM VALOR AUTOMÁTICO
@@ -43,8 +44,8 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function generatePixPayload(amount) {
-    const pixKey = PIX_RANDOM_KEY;
-    const name = "AYLSON GABRIEL D S PEREIR";
+    const pixKey = PIX_KEY;
+    const name = "AYLSON G S PEREIRA";
     const city = "SAO PAULO DO PO";
     const txid = "CORREPOTENGI";
 
@@ -219,29 +220,30 @@ document.addEventListener('DOMContentLoaded', () => {
     return calculateRawTotal().toFixed(2).replace('.', ',');
   }
 
+  function renderQrCodeImage(imgEl, payload) {
+    if (!imgEl) return;
+    try {
+      if (window.QRCodeGenerator && typeof window.QRCodeGenerator.generateSvg === 'function') {
+        const svg = window.QRCodeGenerator.generateSvg(payload, 280);
+        imgEl.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
+        return;
+      }
+    } catch (err) {
+      console.warn('Erro ao gerar QR Code offline:', err);
+    }
+    imgEl.src = `https://api.qrserver.com/v1/create-qr-code/?size=280x280&data=${encodeURIComponent(payload)}`;
+  }
+
   function updateSummaryDisplay() {
     const rawTotal = calculateRawTotal();
     const formattedTotal = calculateFormattedTotal();
 
-    // 1. Gera o payload oficial do Pix com o valor EXATO
+    // 1. Gera o payload oficial do Pix com o valor EXATO e chave nova (E-mail)
     currentPixPayload = generatePixPayload(rawTotal);
 
-    // 2. Atualiza o QR Code dinamicamente com o valor embutido
-    const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(currentPixPayload)}`;
-    
-    if (pixQrImg) {
-      pixQrImg.src = qrUrl;
-      pixQrImg.onerror = () => {
-        pixQrImg.src = 'assets/qrcode_only.png';
-      };
-    }
-
-    if (modalPixQrImg) {
-      modalPixQrImg.src = qrUrl;
-      modalPixQrImg.onerror = () => {
-        modalPixQrImg.src = 'assets/qrcode_only.png';
-      };
-    }
+    // 2. Atualiza os QR Codes dinamicamente com o novo padrão
+    renderQrCodeImage(pixQrImg, currentPixPayload);
+    renderQrCodeImage(modalPixQrImg, currentPixPayload);
 
     // 3. Atualiza os textos e valores em tela
     if (buySectionTotalDisplay) {
@@ -307,14 +309,14 @@ document.addEventListener('DOMContentLoaded', () => {
   setupCopiaColaButton('btnCopyPixCopiaColaModal');
 
   /* --------------------------------------------------
-     8. COPIAR CHAVE PIX ALEATÓRIA SIMPLES
+     8. COPIAR CHAVE PIX (E-MAIL) SIMPLES
      -------------------------------------------------- */
   function setupCopyKeyButton(btnId) {
     const btn = document.getElementById(btnId);
     if (!btn) return;
 
     btn.addEventListener('click', () => {
-      navigator.clipboard.writeText(PIX_RANDOM_KEY).then(() => {
+      navigator.clipboard.writeText(PIX_KEY).then(() => {
         const originalText = btn.textContent;
         btn.textContent = 'COPIADO! ✓';
         btn.style.backgroundColor = '#22C55E';
@@ -325,7 +327,7 @@ document.addEventListener('DOMContentLoaded', () => {
           btn.style.color = '';
         }, 2200);
       }).catch(() => {
-        prompt('Copie a chave Pix aleatória manualmente:', PIX_RANDOM_KEY);
+        prompt('Copie a chave Pix (e-mail) manualmente:', PIX_KEY);
       });
     });
   }
@@ -753,7 +755,7 @@ document.addEventListener('DOMContentLoaded', () => {
       msg += `📏 *Tamanho Escolhido:* ${state.size}\n`;
       msg += `🔢 *Quantidade:* ${state.quantity} un.\n`;
       msg += `💰 *Valor Total Pago:* R$ ${total}\n`;
-      msg += `⚡ *Chave PIX Utilizada:* ${PIX_RANDOM_KEY}\n`;
+      msg += `⚡ *Chave PIX Utilizada:* ${PIX_KEY}\n`;
       msg += `🏦 *Favorecido:* ${PIX_BENEFICIARY}\n\n`;
       msg += `👤 *Nome do Comprador:* ${custName}\n`;
       msg += `📱 *Telefone/WhatsApp:* ${custPhone}\n\n`;

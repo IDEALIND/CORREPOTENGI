@@ -19,8 +19,8 @@ function formatField(id, value) {
 }
 
 function generatePixPayload(amount) {
-    const pixKey = "0fc3c151-a306-45d0-9197-937a46b42339";
-    const name = "AYLSON GABRIEL D S PEREIRA";
+    const pixKey = "bieldamidia.a@outlook.com";
+    const name = "AYLSON G S PEREIRA";
     const city = "SAO PAULO DO PO";
     const txid = "CORREPOTENGI";
 

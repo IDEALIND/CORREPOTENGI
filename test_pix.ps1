@@ -60,10 +60,10 @@ function Build-PixPayload($key, $name, $city, $amount, $txid) {
     return "$raw$crc"
 }
 
-$pix49 = Build-PixPayload "0fc3c151-a306-45d0-9197-937a46b42339" "AYLSON GABRIEL D S PEREIRA" "SAO PAULO DO PO" 49.99 "CORREPOTENGI"
+$pix49 = Build-PixPayload "bieldamidia.a@outlook.com" "AYLSON G S PEREIRA" "SAO PAULO DO PO" 49.99 "CORREPOTENGI"
 Write-Host "PIX Payload (R$ 49,99):"
 Write-Host $pix49
 
-$pix99 = Build-PixPayload "0fc3c151-a306-45d0-9197-937a46b42339" "AYLSON GABRIEL D S PEREIRA" "SAO PAULO DO PO" 99.98 "CORREPOTENGI"
+$pix99 = Build-PixPayload "bieldamidia.a@outlook.com" "AYLSON G S PEREIRA" "SAO PAULO DO PO" 99.98 "CORREPOTENGI"
 Write-Host "PIX Payload (R$ 99,98):"
 Write-Host $pix99
