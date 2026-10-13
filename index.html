@@ -14,7 +14,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:ital,wght@0,600;0,700;0,800;0,900;1,700;1,800&family=Bebas+Neue&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Permanent+Marker&display=swap" rel="stylesheet">
 
-  <link rel="stylesheet" href="style.css?v=2">
+  <link rel="stylesheet" href="style.css?v=3">
 </head>
 <body>
   <!-- Container Mobile 9:16 Enclosure (Optimized for Mobile Screens & Desktop Preview) -->
@@ -876,6 +876,18 @@
 
       <!-- Barra de Ações Rápidas -->
       <div class="manager-actions-bar">
+        <span class="cloud-sync-status-badge" id="cloudSyncStatusBadge">
+          <span class="pulsing-dot-green"></span>
+          <span id="cloudSyncStatusText">Nuvem Conectada (Tempo Real)</span>
+        </span>
+        <button type="button" class="btn-manager-action btn-cloud-sync" id="btnSyncCloudNow" title="Buscar novos pedidos de outros celulares">
+          <span class="btn-action-icon">🔄</span>
+          <span>Sincronizar Nuvem</span>
+        </button>
+        <button type="button" class="btn-manager-action btn-cloud-config" id="btnOpenCloudConfig" title="Configurar URL do Banco em Nuvem">
+          <span class="btn-action-icon">☁️</span>
+          <span>Configurar Nuvem</span>
+        </button>
         <button type="button" class="btn-manager-action btn-export" id="btnExportOrdersCsv">
           <span class="btn-action-icon">📥</span>
           <span>Exportar Planilha (CSV)</span>
@@ -971,6 +983,38 @@
     </div>
   </div>
 
+  <!-- Modal Configuração da Nuvem (Firebase / Multi-Aparelho) -->
+  <div class="manager-backdrop" id="cloudConfigModal" style="display: none;" aria-hidden="true">
+    <div class="cloud-config-card">
+      <div class="manager-login-header">
+        <div class="login-brand-icon">☁️</div>
+        <h3 class="login-title">SINCRONIZAÇÃO EM NUVEM</h3>
+        <p class="login-subtitle">Conexão em Tempo Real entre Celulares e Computadores</p>
+        <button type="button" class="login-close-btn" id="closeCloudConfigBtn">✕</button>
+      </div>
+
+      <div class="cloud-config-tip">
+        Todos os pedidos realizados de <strong>qualquer celular ou PC</strong> são salvos na nuvem e chegam aqui em tempo real. Você pode conectar seu próprio banco do Firebase Realtime Database.
+      </div>
+
+      <form id="cloudConfigForm" class="manager-login-form">
+        <div class="login-input-group">
+          <label for="cloudDatabaseUrlInput">URL DO FIREBASE REALTIME DATABASE:</label>
+          <input type="url" id="cloudDatabaseUrlInput" placeholder="https://seu-projeto-default-rtdb.firebaseio.com" required autocomplete="off">
+        </div>
+
+        <div style="display: flex; gap: 8px; margin-top: 6px;">
+          <button type="submit" class="btn-login-submit" style="flex: 1;">
+            <span>SALVAR & CONECTAR</span>
+          </button>
+          <button type="button" class="btn-manager-action btn-test" id="btnTestCloudConnection" style="padding: 12px 14px;">
+            <span>Testar</span>
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
   <!-- Modal Zoom do Comprovante (Lightroom) -->
   <div class="receipt-zoom-backdrop" id="receiptZoomModal" style="display: none;" aria-hidden="true">
     <div class="receipt-zoom-card">
@@ -996,6 +1040,6 @@
   <!-- Toast Notificação do Gestor -->
   <div class="manager-toast" id="managerToast" style="display: none;" aria-live="polite"></div>
 
-  <script src="script.js?v=3"></script>
+  <script src="script.js?v=5"></script>
 </body>
 </html>

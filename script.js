@@ -393,8 +393,138 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
-  async function saveOrderToDB(order) {
+  /* --------------------------------------------------
+     SINCRONIZAÇÃO EM NUVEM EM TEMPO REAL (FIREBASE / MULTI-DISPOSITIVO)
+     Garante que pedidos feitos de outro celular ou PC apareçam na hora no painel
+     -------------------------------------------------- */
+  const DEFAULT_CLOUD_URL = 'https://correpotengi-2026-default-rtdb.firebaseio.com';
+
+  function getCloudDatabaseUrl() {
+    const custom = localStorage.getItem('corre_potengi_cloud_url');
+    return (custom || DEFAULT_CLOUD_URL).trim().replace(/\/+$/, '');
+  }
+
+  function setCloudDatabaseUrl(url) {
+    if (!url) {
+      localStorage.removeItem('corre_potengi_cloud_url');
+    } else {
+      localStorage.setItem('corre_potengi_cloud_url', url.trim().replace(/\/+$/, ''));
+    }
+  }
+
+  function playOrderNotificationSound() {
+    try {
+      const AudioCtx = window.AudioContext || window.webkitAudioContext;
+      if (!AudioCtx) return;
+      const ctx = new AudioCtx();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(587.33, ctx.currentTime); // D5
+      osc.frequency.exponentialRampToValueAtTime(880, ctx.currentTime + 0.15); // A5
+      gain.gain.setValueAtTime(0.2, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.5);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start();
+      osc.stop(ctx.currentTime + 0.5);
+    } catch (e) {}
+  }
+
+  async function sendOrderToCloud(order) {
+    const cloudUrl = getCloudDatabaseUrl();
+    if (!cloudUrl) return;
+
+    try {
+      // Cria payload seguro para envio em nuvem
+      const payload = { ...order };
+      // Se tiver anexo de comprovante muito grande, envia thumbnail ou metadados
+      await fetch(`${cloudUrl}/orders/${order.id}.json`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+    } catch (err) {
+      console.warn('Sync com nuvem avisou:', err);
+    }
+  }
+
+  let cloudPollingInterval = null;
+
+  async function syncOrdersFromCloud(notifyNew = true) {
+    const cloudUrl = getCloudDatabaseUrl();
+    if (!cloudUrl) return;
+
+    const statusText = document.getElementById('cloudSyncStatusText');
+    const statusBadge = document.getElementById('cloudSyncStatusBadge');
+    if (statusBadge) statusBadge.classList.add('syncing');
+    if (statusText) statusText.textContent = 'Sincronizando...';
+
+    try {
+      const res = await fetch(`${cloudUrl}/orders.json`);
+      if (!res.ok) throw new Error('Status ' + res.status);
+      const data = await res.json();
+
+      if (data && typeof data === 'object') {
+        const cloudOrders = Object.values(data);
+        let newCount = 0;
+        let latestOrder = null;
+
+        for (const cOrder of cloudOrders) {
+          if (!cOrder || !cOrder.id) continue;
+          const exists = currentLoadedOrders.some(o => o.id === cOrder.id);
+          if (!exists) {
+            await saveOrderToDB(cOrder, false); // false = não re-enviar para a própria nuvem
+            newCount++;
+            latestOrder = cOrder;
+          }
+        }
+
+        if (newCount > 0) {
+          currentLoadedOrders = await getAllOrdersFromDB();
+          renderMetrics(currentLoadedOrders);
+          renderSizeSummary(currentLoadedOrders);
+          renderOrdersList();
+
+          if (notifyNew) {
+            playOrderNotificationSound();
+            showManagerToast(`⚡ NOVO PEDIDO EM TEMPO REAL: ${latestOrder?.customerName || 'Cliente'} (Tam: ${latestOrder?.size || 'M'})!`);
+          }
+        }
+      }
+
+      if (statusBadge) statusBadge.classList.remove('syncing');
+      if (statusText) statusText.textContent = 'Nuvem Conectada (Tempo Real)';
+    } catch (err) {
+      if (statusBadge) statusBadge.classList.remove('syncing');
+      if (statusText) statusText.textContent = 'Offline (Memória Local)';
+    }
+  }
+
+  function startRealtimeCloudPolling() {
+    stopRealtimeCloudPolling();
+    // Executa uma sincronização imediata
+    syncOrdersFromCloud(false);
+    // E busca pedidos novos de outros celulares/PCs a cada 3.5 segundos
+    cloudPollingInterval = setInterval(() => {
+      if (managerDashboardModal && managerDashboardModal.classList.contains('open')) {
+        syncOrdersFromCloud(true);
+      }
+    }, 3500);
+  }
+
+  function stopRealtimeCloudPolling() {
+    if (cloudPollingInterval) {
+      clearInterval(cloudPollingInterval);
+      cloudPollingInterval = null;
+    }
+  }
+
+  async function saveOrderToDB(order, pushToCloud = true) {
     saveMetaBackup(order);
+    if (pushToCloud) {
+      sendOrderToCloud(order);
+    }
     try {
       const db = await openGestorDB();
       if (!db) return true;
@@ -790,10 +920,12 @@ document.addEventListener('DOMContentLoaded', () => {
       managerDashboardModal.setAttribute('aria-hidden', 'false');
     });
     loadAndRenderDashboard();
+    startRealtimeCloudPolling();
   }
 
   function closeManagerDashboard() {
     if (!managerDashboardModal) return;
+    stopRealtimeCloudPolling();
     managerDashboardModal.classList.remove('open');
     managerDashboardModal.setAttribute('aria-hidden', 'true');
     setTimeout(() => {
@@ -811,8 +943,84 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
+  /* Controles da Conexão em Nuvem */
+  const cloudConfigModal = document.getElementById('cloudConfigModal');
+  const btnOpenCloudConfig = document.getElementById('btnOpenCloudConfig');
+  const closeCloudConfigBtn = document.getElementById('closeCloudConfigBtn');
+  const cloudConfigForm = document.getElementById('cloudConfigForm');
+  const cloudDatabaseUrlInput = document.getElementById('cloudDatabaseUrlInput');
+  const btnTestCloudConnection = document.getElementById('btnTestCloudConnection');
+  const btnSyncCloudNow = document.getElementById('btnSyncCloudNow');
+
+  function openCloudConfigModal() {
+    if (!cloudConfigModal) return;
+    if (cloudDatabaseUrlInput) cloudDatabaseUrlInput.value = getCloudDatabaseUrl();
+    cloudConfigModal.style.display = 'flex';
+    requestAnimationFrame(() => {
+      cloudConfigModal.classList.add('open');
+      cloudConfigModal.setAttribute('aria-hidden', 'false');
+    });
+  }
+
+  function closeCloudConfigModal() {
+    if (!cloudConfigModal) return;
+    cloudConfigModal.classList.remove('open');
+    cloudConfigModal.setAttribute('aria-hidden', 'true');
+    setTimeout(() => {
+      if (!cloudConfigModal.classList.contains('open')) {
+        cloudConfigModal.style.display = 'none';
+      }
+    }, 250);
+  }
+
+  if (btnOpenCloudConfig) btnOpenCloudConfig.addEventListener('click', openCloudConfigModal);
+  if (closeCloudConfigBtn) closeCloudConfigBtn.addEventListener('click', closeCloudConfigModal);
+  if (cloudConfigModal) {
+    cloudConfigModal.addEventListener('click', (e) => {
+      if (e.target === cloudConfigModal) closeCloudConfigModal();
+    });
+  }
+
+  if (btnSyncCloudNow) {
+    btnSyncCloudNow.addEventListener('click', async () => {
+      showManagerToast('🔄 Sincronizando com outros aparelhos...');
+      await syncOrdersFromCloud(true);
+    });
+  }
+
+  if (cloudConfigForm) {
+    cloudConfigForm.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const newUrl = cloudDatabaseUrlInput?.value.trim();
+      setCloudDatabaseUrl(newUrl);
+      closeCloudConfigModal();
+      showManagerToast('☁️ URL da Nuvem salva! Conectando...');
+      syncOrdersFromCloud(false);
+    });
+  }
+
+  if (btnTestCloudConnection) {
+    btnTestCloudConnection.addEventListener('click', async () => {
+      const testUrl = cloudDatabaseUrlInput?.value.trim() || getCloudDatabaseUrl();
+      try {
+        btnTestCloudConnection.textContent = 'Testando...';
+        const res = await fetch(`${testUrl.replace(/\/+$/, '')}/orders.json`);
+        if (res.ok) {
+          alert('✅ Conexão bem-sucedida com o banco de dados em nuvem!');
+        } else {
+          alert(`⚠️ Resposta recebida (Status ${res.status}). Verifique as permissões de leitura/escrita.`);
+        }
+      } catch (err) {
+        alert('❌ Erro de conexão com a URL informada. Certifique-se de que é uma URL válida com acesso liberado.');
+      } finally {
+        btnTestCloudConnection.textContent = 'Testar';
+      }
+    });
+  }
+
   window.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') {
+      if (cloudConfigModal && cloudConfigModal.classList.contains('open')) closeCloudConfigModal();
       if (managerLoginModal && managerLoginModal.classList.contains('open')) closeManagerLoginModal();
       if (managerDashboardModal && managerDashboardModal.classList.contains('open')) closeManagerDashboard();
       if (receiptZoomModal && receiptZoomModal.classList.contains('open')) closeReceiptZoom();

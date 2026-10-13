@@ -2459,17 +2459,24 @@ body {
   position: fixed;
   inset: 0;
   z-index: 99999;
-  background: rgba(4, 6, 10, 0.88);
+  background: rgba(4, 6, 10, 0.94);
   backdrop-filter: blur(14px);
   -webkit-backdrop-filter: blur(14px);
   display: none;
-  align-items: center;
+  align-items: flex-start;
   justify-content: center;
-  padding: 16px;
+  padding: 24px 16px 50px;
+  overflow-y: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
   opacity: 0;
   visibility: hidden;
   pointer-events: none;
   transition: opacity 0.3s cubic-bezier(0.16, 1, 0.3, 1), visibility 0.3s;
+}
+
+.manager-backdrop::-webkit-scrollbar {
+  display: none;
 }
 
 .manager-backdrop.open {
@@ -2688,17 +2695,17 @@ body {
 
 .manager-modal-card {
   width: 100%;
-  max-width: 780px;
-  max-height: 92vh;
+  max-width: 1240px;
   background: #090B10;
   border: 1px solid rgba(255, 85, 0, 0.35);
   box-shadow: 0 25px 60px rgba(0, 0, 0, 0.85), 0 0 40px rgba(255, 85, 0, 0.15);
   border-radius: var(--radius-lg);
   display: flex;
   flex-direction: column;
-  overflow: hidden;
-  transform: scale(0.96) translateY(12px);
+  overflow: visible;
+  transform: scale(0.97) translateY(12px);
   transition: transform 0.32s cubic-bezier(0.16, 1, 0.3, 1);
+  margin: 0 auto 30px;
 }
 
 .manager-backdrop.open .manager-modal-card {
@@ -3075,11 +3082,11 @@ body {
   color: #FFFFFF;
 }
 
-/* Área de Listagem dos Clientes */
+/* Área de Listagem dos Clientes (SEM BARRA DE ROLAGEM E COM ESPAÇO AMPLO) */
 .manager-orders-container {
   flex: 1;
-  overflow-y: auto;
-  padding: 4px 24px 24px;
+  overflow: visible;
+  padding: 6px 24px 36px;
   display: flex;
   flex-direction: column;
 }
@@ -3088,10 +3095,12 @@ body {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding-bottom: 10px;
-  font-size: 0.72rem;
+  padding-bottom: 12px;
+  font-size: 0.74rem;
   color: var(--color-gray-400);
   flex-shrink: 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  margin-bottom: 14px;
 }
 
 .orders-count-label {
@@ -3100,9 +3109,15 @@ body {
 }
 
 .manager-orders-list {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(480px, 1fr));
+  gap: 16px;
+}
+
+@media (max-width: 680px) {
+  .manager-orders-list {
+    grid-template-columns: 1fr;
+  }
 }
 
 /* Card Individual do Cliente */
@@ -3603,4 +3618,74 @@ body {
     flex-direction: column;
     align-items: flex-start;
   }
+}
+
+/* Badges e Ações de Nuvem em Tempo Real */
+.cloud-sync-status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(16, 185, 129, 0.15);
+  border: 1px solid rgba(16, 185, 129, 0.4);
+  color: #34D399;
+  padding: 5px 12px;
+  border-radius: var(--radius-full);
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+}
+
+.cloud-sync-status-badge.syncing {
+  background: rgba(255, 204, 0, 0.15);
+  border-color: rgba(255, 204, 0, 0.4);
+  color: #FBBF24;
+}
+
+.btn-cloud-sync {
+  background: rgba(59, 130, 246, 0.15);
+  border-color: rgba(59, 130, 246, 0.35);
+  color: #93C5FD;
+}
+
+.btn-cloud-sync:hover {
+  background: rgba(59, 130, 246, 0.28);
+  color: #FFFFFF;
+}
+
+.btn-cloud-config {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.14);
+  color: var(--color-gray-300);
+}
+
+.btn-cloud-config:hover {
+  background: rgba(255, 255, 255, 0.12);
+  color: #FFFFFF;
+}
+
+/* Modal de Configuração da Nuvem */
+.cloud-config-card {
+  width: 100%;
+  max-width: 520px;
+  background: #0B0E15;
+  border: 1px solid rgba(59, 130, 246, 0.4);
+  box-shadow: 0 25px 60px rgba(0, 0, 0, 0.9), 0 0 35px rgba(59, 130, 246, 0.2);
+  border-radius: var(--radius-lg);
+  padding: 26px 24px;
+  position: relative;
+}
+
+.cloud-config-tip {
+  font-size: 0.8rem;
+  color: var(--color-gray-300);
+  line-height: 1.45;
+  margin-bottom: 16px;
+  background: rgba(59, 130, 246, 0.08);
+  border: 1px solid rgba(59, 130, 246, 0.2);
+  padding: 10px 14px;
+  border-radius: var(--radius-sm);
+}
+
+.cloud-config-tip strong {
+  color: #93C5FD;
 }
