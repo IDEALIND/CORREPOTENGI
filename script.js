@@ -14,7 +14,7 @@ document.addEventListener('DOMContentLoaded', () => {
     pickupLocation: 'SCOFIELD — Rua Bento Urbano, 163, São Paulo do Potengi/RN'
   };
 
-  const WHATSAPP_NUMBER = '5584996838268';
+  const WHATSAPP_NUMBER = '5584986286423';
   const PIX_RANDOM_KEY = '0fc3c151-a306-45d0-9197-937a46b42339';
   const PIX_BENEFICIARY = 'AYLSON GABRIEL DA SILVA PEREIRA (Banco Inter)';
 
