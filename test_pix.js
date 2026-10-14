@@ -20,13 +20,13 @@ function formatField(id, value) {
 
 function generatePixPayload(amount) {
     const pixKey = "bieldamidia.a@outlook.com";
-    const name = "AYLSON G S PEREIRA";
-    const city = "SAO PAULO DO PO";
+    const name = "N";
+    const city = "C";
     const txid = "CORREPOTENGI";
 
     const formattedAmount = Number(amount).toFixed(2);
 
-    const merchantAccount = formatField('00', 'br.gov.bcb.pix') + formatField('01', pixKey);
+    const merchantAccount = formatField('00', 'BR.GOV.BCB.PIX') + formatField('01', pixKey);
 
     let payload = 
         formatField('00', '01') +
@@ -35,8 +35,8 @@ function generatePixPayload(amount) {
         formatField('53', '986') +
         formatField('54', formattedAmount) +
         formatField('58', 'BR') +
-        formatField('59', name.substring(0, 25)) +
-        formatField('60', city.substring(0, 15)) +
+        formatField('59', name) +
+        formatField('60', city) +
         formatField('62', formatField('05', txid)) +
         '6304';
 
@@ -44,5 +44,5 @@ function generatePixPayload(amount) {
     return payload + crc;
 }
 
-console.log("R$ 49.99:", generatePixPayload(49.99));
-console.log("R$ 99.98:", generatePixPayload(99.98));
+console.log("R$ 59.99:", generatePixPayload(59.99));
+console.log("R$ 119.98:", generatePixPayload(119.98));

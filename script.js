@@ -9,7 +9,7 @@ document.addEventListener('DOMContentLoaded', () => {
     gender: 'Unissex',
     size: 'M',
     quantity: 1,
-    unitPrice: 49.99,
+    unitPrice: 59.99,
     receiptFileName: '',
     pickupLocation: 'SCOFIELD — Rua Bento Urbano, 163, São Paulo do Potengi/RN'
   };
@@ -18,6 +18,9 @@ document.addEventListener('DOMContentLoaded', () => {
   const PIX_KEY = 'bieldamidia.a@outlook.com';
   const PIX_RANDOM_KEY = PIX_KEY;
   const PIX_BENEFICIARY = 'AYLSON GABRIEL DA SILVA PEREIRA';
+
+  // Código Pix Copia e Cola Oficial fornecido pelo Gestor (R$ 59,99)
+  const OFFICIAL_PIX_PAYLOAD_5999 = '00020126470014BR.GOV.BCB.PIX0125bieldamidia.a@outlook.com520400005303986540559.995802BR5901N6001C62160512CORREPOTENGI6304D918';
 
   /* --------------------------------------------------
      GERADOR OFICIAL DO PADRÃO PIX BR CODE COM VALOR AUTOMÁTICO
@@ -44,14 +47,17 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function generatePixPayload(amount) {
+    const formattedAmount = Number(amount).toFixed(2);
+    if (formattedAmount === '59.99') {
+      return OFFICIAL_PIX_PAYLOAD_5999;
+    }
+
     const pixKey = PIX_KEY;
-    const name = "AYLSON G S PEREIRA";
-    const city = "SAO PAULO DO PO";
+    const name = "N";
+    const city = "C";
     const txid = "CORREPOTENGI";
 
-    const formattedAmount = Number(amount).toFixed(2);
-
-    const merchantAccount = formatField('00', 'br.gov.bcb.pix') + formatField('01', pixKey);
+    const merchantAccount = formatField('00', 'BR.GOV.BCB.PIX') + formatField('01', pixKey);
 
     const payloadWithoutCRC = 
       formatField('00', '01') +
@@ -1090,7 +1096,7 @@ document.addEventListener('DOMContentLoaded', () => {
     orders.forEach(o => {
       const q = Number(o.quantity) || 1;
       totalShirts += q;
-      totalRevenueRaw += (o.totalRaw ? Number(o.totalRaw) : (q * 49.99));
+      totalRevenueRaw += (o.totalRaw ? Number(o.totalRaw) : (q * 59.99));
       if (o.hasReceipt || o.receiptDataUrl) totalReceipts++;
     });
 
@@ -1277,7 +1283,7 @@ document.addEventListener('DOMContentLoaded', () => {
             <div class="order-detail-line" style="margin-top: 4px;">
               <span>👕 <strong>Qtd:</strong> ${order.quantity || 1} un.</span>
               <span>•</span>
-              <span>💰 <strong>Total:</strong> R$ ${order.total || '49,99'}</span>
+              <span>💰 <strong>Total:</strong> R$ ${order.total || '59,99'}</span>
             </div>
             <div class="order-detail-line">
               <span>📍 Retirada: SCOFIELD</span>
@@ -1463,7 +1469,7 @@ document.addEventListener('DOMContentLoaded', () => {
           `"${(o.customerPhone || '').replace(/"/g, '""')}"`,
           `"${o.size || 'M'}"`,
           `"${o.quantity || 1}"`,
-          `"${o.total || '49,99'}"`,
+          `"${o.total || '59,99'}"`,
           `"${(o.hasReceipt || o.receiptDataUrl) ? 'Sim' : 'Não'}"`,
           `"${(o.receiptFileName || '').replace(/"/g, '""')}"`,
           `"${o.status || 'Confirmado'}"`
@@ -1507,7 +1513,7 @@ document.addEventListener('DOMContentLoaded', () => {
       ctx.fillText('COMPROVANTE DE PAGAMENTO PIX', 20, 26);
       ctx.fillStyle = '#FFCC00';
       ctx.font = 'bold 24px sans-serif';
-      ctx.fillText('R$ 49,99', 20, 90);
+      ctx.fillText('R$ 59,99', 20, 90);
       ctx.fillStyle = '#E5E7EB';
       ctx.font = '14px sans-serif';
       ctx.fillText(`Pagador: ${demoNames[randomIdx]}`, 20, 130);
@@ -1522,8 +1528,8 @@ document.addEventListener('DOMContentLoaded', () => {
         customerPhone: '(84) 9' + Math.floor(10000000 + Math.random() * 90000000),
         size: demoSizes[randomIdx],
         quantity: 1,
-        total: '49,99',
-        totalRaw: 49.99,
+        total: '59,99',
+        totalRaw: 59.99,
         pickupLocation: state.pickupLocation,
         timestamp: Date.now(),
         displayDate: new Date().toLocaleDateString('pt-BR'),

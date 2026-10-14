@@ -23,7 +23,7 @@ function Build-PixPayload($key, $name, $city, $amount, $txid) {
     $p00 = "000201"
     
     # 26: Merchant Account Information
-    $gui = "0014br.gov.bcb.pix"
+    $gui = "0014BR.GOV.BCB.PIX"
     $kLen = $key.Length.ToString("D2")
     $k = "01$kLen$key"
     $accInfo = "$gui$k"
@@ -60,10 +60,10 @@ function Build-PixPayload($key, $name, $city, $amount, $txid) {
     return "$raw$crc"
 }
 
-$pix49 = Build-PixPayload "bieldamidia.a@outlook.com" "AYLSON G S PEREIRA" "SAO PAULO DO PO" 49.99 "CORREPOTENGI"
-Write-Host "PIX Payload (R$ 49,99):"
-Write-Host $pix49
+$pix59 = Build-PixPayload "bieldamidia.a@outlook.com" "N" "C" 59.99 "CORREPOTENGI"
+Write-Host "PIX Payload (R$ 59,99):"
+Write-Host $pix59
 
-$pix99 = Build-PixPayload "bieldamidia.a@outlook.com" "AYLSON G S PEREIRA" "SAO PAULO DO PO" 99.98 "CORREPOTENGI"
-Write-Host "PIX Payload (R$ 99,98):"
-Write-Host $pix99
+$pix119 = Build-PixPayload "bieldamidia.a@outlook.com" "N" "C" 119.98 "CORREPOTENGI"
+Write-Host "PIX Payload (R$ 119,98):"
+Write-Host $pix119
