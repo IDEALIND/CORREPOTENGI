@@ -19,9 +19,9 @@ function formatField(id, value) {
 }
 
 function generatePixPayload(amount) {
-    const pixKey = "bieldamidia.a@outlook.com";
-    const name = "N";
-    const city = "C";
+    const pixKey = "aylson.gabriel@outlook.com";
+    const name = "AYLSON GABRIEL DA S PEREI";
+    const city = "SAO PAULO";
     const txid = "CORREPOTENGI";
 
     const formattedAmount = Number(amount).toFixed(2);

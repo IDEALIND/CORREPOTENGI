@@ -1,6 +1,6 @@
 /* ==========================================================================
    CORRE POTENGI - MOTOR DE COMPRA & E-COMMERCE MOBILE PIX
-   WhatsApp Oficial: (84) 99683-8268 | Chave PIX: bieldamidia.a@outlook.com
+   WhatsApp Oficial: (84) 99683-8268 | Chave PIX: aylson.gabriel@outlook.com
    ========================================================================== */
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -15,12 +15,13 @@ document.addEventListener('DOMContentLoaded', () => {
   };
 
   const WHATSAPP_NUMBER = '5584986286423';
-  const PIX_KEY = 'bieldamidia.a@outlook.com';
+  const PIX_KEY = 'aylson.gabriel@outlook.com';
+  const PIX_DIRECT_KEY = 'bieldamidia.a@outlook.com';
   const PIX_RANDOM_KEY = PIX_KEY;
   const PIX_BENEFICIARY = 'AYLSON GABRIEL DA SILVA PEREIRA';
 
   // Código Pix Copia e Cola Oficial fornecido pelo Gestor (R$ 59,99)
-  const OFFICIAL_PIX_PAYLOAD_5999 = '00020126470014BR.GOV.BCB.PIX0125bieldamidia.a@outlook.com520400005303986540559.995802BR5901N6001C62160512CORREPOTENGI6304D918';
+  const OFFICIAL_PIX_PAYLOAD_5999 = '00020126480014BR.GOV.BCB.PIX0126aylson.gabriel@outlook.com520400005303986540559.995802BR5925AYLSON GABRIEL DA S PEREI6009SAO PAULO622605222ZrFNTXi03emEnfKPP0c5h6304F68D';
 
   /* --------------------------------------------------
      GERADOR OFICIAL DO PADRÃO PIX BR CODE COM VALOR AUTOMÁTICO
@@ -53,8 +54,8 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     const pixKey = PIX_KEY;
-    const name = "N";
-    const city = "C";
+    const name = "AYLSON GABRIEL DA S PEREI";
+    const city = "SAO PAULO";
     const txid = "CORREPOTENGI";
 
     const merchantAccount = formatField('00', 'BR.GOV.BCB.PIX') + formatField('01', pixKey);
@@ -228,6 +229,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function renderQrCodeImage(imgEl, payload) {
     if (!imgEl) return;
+    if (payload === OFFICIAL_PIX_PAYLOAD_5999) {
+      imgEl.src = 'assets/qrcode_only.png';
+      return;
+    }
     try {
       if (window.QRCodeGenerator && typeof window.QRCodeGenerator.generateSvg === 'function') {
         const svg = window.QRCodeGenerator.generateSvg(payload, 280);
@@ -322,7 +327,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!btn) return;
 
     btn.addEventListener('click', () => {
-      navigator.clipboard.writeText(PIX_KEY).then(() => {
+      navigator.clipboard.writeText(PIX_DIRECT_KEY).then(() => {
         const originalText = btn.textContent;
         btn.textContent = 'COPIADO! ✓';
         btn.style.backgroundColor = '#22C55E';
@@ -333,7 +338,7 @@ document.addEventListener('DOMContentLoaded', () => {
           btn.style.color = '';
         }, 2200);
       }).catch(() => {
-        prompt('Copie a chave Pix (e-mail) manualmente:', PIX_KEY);
+        prompt('Copie a chave Pix (e-mail) manualmente:', PIX_DIRECT_KEY);
       });
     });
   }
