@@ -1627,130 +1627,70 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 
-
-
-/* CORREÇÃO DO BOTÃO DE PEDIDOS - CORRE POTENGI */
-
+/* CORREÇÃO DO BOTÃO DE PEDIDOS – CORRE POTENGI */
 (function () {
-
   const button = document.getElementById("submitOrderBtn");
 
   if (!button || button.dataset.whatsappFix === "1") return;
-
   button.dataset.whatsappFix = "1";
 
+  // Impede que o formulário seja enviado duas vezes
   button.addEventListener("click", function (event) {
-
     event.preventDefault();
+    event.stopImmediatePropagation();
 
-    const nome = document
-
-      .getElementById("directCustName")?.value.trim();
-
-    const telefone = document
-
-      .getElementById("directCustPhone")?.value.trim();
-
-    const arquivo = document
-
-      .getElementById("receiptFileInput")?.files?.[0];
-
-    const tamanho = document
-
-      .querySelector(".size-box.active")?.dataset.size || "M";
-
+    const nome = document.getElementById("directCustName")?.value.trim() || "";
+    const telefone = document.getElementById("directCustPhone")?.value.trim() || "";
+    const arquivo = document.getElementById("receiptFileInput")?.files?.[0];
+    const tamanho = document.querySelector(".size-box.active")?.dataset.size || "M";
     const quantidade = Math.max(
-
       1,
-
-      parseInt(
-
-        document.getElementById("qtyValue")?.textContent || "1",
-
-        10
-
-      ) || 1
-
-    );
-
-    const valorUnitario = 59.99;
-
-    const total = (quantidade * valorUnitario).toLocaleString(
-
-      "pt-BR",
-
-      { style: "currency", currency: "BRL" }
-
+      parseInt(document.getElementById("qtyValue")?.textContent || "1", 10) || 1
     );
 
     if (!nome) {
-
       alert("Digite seu nome completo.");
-
       document.getElementById("directCustName")?.focus();
-
       return;
-
     }
 
     const numerosTelefone = telefone.replace(/\D/g, "");
-
-    if (!telefone || numerosTelefone.length < 10) {
-
+    if (numerosTelefone.length < 10) {
       alert("Informe um telefone válido com DDD.");
-
       document.getElementById("directCustPhone")?.focus();
-
       return;
-
     }
 
     if (!arquivo) {
-
       alert("Anexe o comprovante do PIX antes de continuar.");
-
       document.getElementById("receiptFileInput")?.click();
-
       return;
-
     }
 
+    const valorUnitario = 59.99;
+    const total = (quantidade * valorUnitario).toLocaleString("pt-BR", {
+      style: "currency",
+      currency: "BRL"
+    });
+
     const mensagem = [
-
       "Olá! Quero confirmar meu pedido da camisa Corre Potengi.",
-
       "",
-
       "NOME: " + nome,
-
       "TELEFONE: " + telefone,
-
       "PRODUTO: Camisa Oficial Corre Potengi 2026",
-
       "TAMANHO: " + tamanho,
-
       "QUANTIDADE: " + quantidade,
-
       "VALOR TOTAL: " + total,
-
       "COMPROVANTE: " + arquivo.name,
-
       "",
-
       "Estou enviando o comprovante PIX nesta conversa.",
-
       "Retirada: SCOFIELD, Rua Bento Urbano, 163, São Paulo do Potengi/RN."
-
     ].join("\n");
 
-    const url =
-
-      "https://wa.me/5584986286423?text=" +
-
+    const url = "https://wa.me/5584986286423?text=" +
       encodeURIComponent(mensagem);
 
     window.location.href = url;
-
-  });
-
+  }, true);
 })();
