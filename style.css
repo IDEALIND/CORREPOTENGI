@@ -1862,6 +1862,8 @@ body {
 }
 
 .dropzone-file-selected {
+  position: relative;
+  z-index: 2;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -1926,6 +1928,8 @@ body {
   position: relative;
   overflow: hidden;
   transition: transform var(--transition-fast);
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
 }
 
 .btn-order-checkout:active {

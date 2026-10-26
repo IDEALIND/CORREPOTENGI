@@ -360,22 +360,31 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function openGestorDB() {
     return new Promise((resolve, reject) => {
-      if (!window.indexedDB) {
-        resolve(null);
-        return;
-      }
-      const request = indexedDB.open(DB_NAME, DB_VERSION);
-      request.onupgradeneeded = (e) => {
-        const db = e.target.result;
-        if (!db.objectStoreNames.contains(STORE_NAME)) {
-          const store = db.createObjectStore(STORE_NAME, { keyPath: 'id' });
-          store.createIndex('createdAt', 'createdAt', { unique: false });
-          store.createIndex('customerPhone', 'customerPhone', { unique: false });
-          store.createIndex('size', 'size', { unique: false });
+      try {
+        if (!window.indexedDB) {
+          resolve(null);
+          return;
         }
-      };
-      request.onsuccess = () => resolve(request.result);
-      request.onerror = () => resolve(null);
+        const request = indexedDB.open(DB_NAME, DB_VERSION);
+        request.onupgradeneeded = (e) => {
+          try {
+            const db = e.target.result;
+            if (!db.objectStoreNames.contains(STORE_NAME)) {
+              const store = db.createObjectStore(STORE_NAME, { keyPath: 'id' });
+              store.createIndex('createdAt', 'createdAt', { unique: false });
+              store.createIndex('customerPhone', 'customerPhone', { unique: false });
+              store.createIndex('size', 'size', { unique: false });
+            }
+          } catch (err) {
+            console.warn('Erro ao criar store no IndexedDB:', err);
+          }
+        };
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => resolve(null);
+        request.onblocked = () => resolve(null);
+      } catch (err) {
+        resolve(null);
+      }
     });
   }
 
@@ -451,7 +460,11 @@ document.addEventListener('DOMContentLoaded', () => {
     try {
       // Cria payload seguro para envio em nuvem
       const payload = { ...order };
-      // Se tiver anexo de comprovante muito grande, envia thumbnail ou metadados
+      // Se tiver anexo de comprovante muito grande, não envia o base64 para evitar erro 413 do Firebase
+      if (payload.receiptDataUrl && payload.receiptDataUrl.length > 200000) {
+        payload.receiptDataUrl = null;
+        payload.receiptStoredLocally = true;
+      }
       await fetch(`${cloudUrl}/orders/${order.id}.json`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
@@ -534,22 +547,38 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   async function saveOrderToDB(order, pushToCloud = true) {
-    saveMetaBackup(order);
-    if (pushToCloud) {
-      sendOrderToCloud(order);
+    try {
+      saveMetaBackup(order);
+    } catch (e) {
+      console.warn('Erro no backup meta:', e);
     }
+
+    if (pushToCloud) {
+      try {
+        sendOrderToCloud(order);
+      } catch (e) {
+        console.warn('Erro ao disparar nuvem:', e);
+      }
+    }
+
     try {
       const db = await openGestorDB();
       if (!db) return true;
       return new Promise((resolve) => {
-        const tx = db.transaction(STORE_NAME, 'readwrite');
-        const store = tx.objectStore(STORE_NAME);
-        store.put(order);
-        tx.oncomplete = () => resolve(true);
-        tx.onerror = () => resolve(false);
+        try {
+          const tx = db.transaction(STORE_NAME, 'readwrite');
+          const store = tx.objectStore(STORE_NAME);
+          store.put(order);
+          tx.oncomplete = () => resolve(true);
+          tx.onerror = () => resolve(false);
+          tx.onabort = () => resolve(false);
+        } catch (err) {
+          console.warn('Erro ao salvar no IndexedDB:', err);
+          resolve(false);
+        }
       });
     } catch (e) {
-      console.warn('Erro ao salvar no IndexedDB:', e);
+      console.warn('Erro ao abrir IndexedDB:', e);
       return true;
     }
   }
@@ -644,35 +673,91 @@ document.addEventListener('DOMContentLoaded', () => {
      10. UPLOAD DO COMPROVANTE DE PAGAMENTO & AUTO-REGISTRO
      -------------------------------------------------- */
   const receiptFileInput = document.getElementById('receiptFileInput');
+  const dropzoneReceipt = document.getElementById('dropzoneReceipt');
   const dropzonePrompt = document.getElementById('dropzonePrompt');
   const dropzoneSelected = document.getElementById('dropzoneSelected');
   const selectedFilename = document.getElementById('selectedFilename');
   const btnRemoveFile = document.getElementById('btnRemoveFile');
 
+  // Redimensiona fotos grandes da câmera do celular para não pesar na memória nem falhar no envio
+  function optimizeReceiptFile(file) {
+    return new Promise((resolve) => {
+      if (!file) return resolve(null);
+      if (!file.type || !file.type.startsWith('image/')) {
+        // Arquivos PDF ou outros
+        const reader = new FileReader();
+        reader.onload = (e) => resolve(e.target.result);
+        reader.onerror = () => resolve(null);
+        reader.readAsDataURL(file);
+        return;
+      }
+
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const img = new Image();
+        img.onload = () => {
+          try {
+            const maxDim = 1200;
+            let width = img.width;
+            let height = img.height;
+            if (width > maxDim || height > maxDim) {
+              if (width > height) {
+                height = Math.round((height * maxDim) / width);
+                width = maxDim;
+              } else {
+                width = Math.round((width * maxDim) / height);
+                height = maxDim;
+              }
+            }
+            const canvas = document.createElement('canvas');
+            canvas.width = width;
+            canvas.height = height;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(img, 0, 0, width, height);
+            const dataUrl = canvas.toDataURL('image/jpeg', 0.82);
+            resolve(dataUrl);
+          } catch (err) {
+            resolve(e.target.result);
+          }
+        };
+        img.onerror = () => resolve(e.target.result);
+        img.src = e.target.result;
+      };
+      reader.onerror = () => resolve(null);
+      reader.readAsDataURL(file);
+    });
+  }
+
+  // Permite clicar em qualquer área do dropzone no celular
+  if (dropzoneReceipt && receiptFileInput) {
+    dropzoneReceipt.addEventListener('click', (e) => {
+      if (e.target !== receiptFileInput && !e.target.closest('#btnRemoveFile')) {
+        receiptFileInput.click();
+      }
+    });
+  }
+
   if (receiptFileInput) {
-    receiptFileInput.addEventListener('change', (e) => {
-      const file = e.target.files[0];
+    receiptFileInput.addEventListener('change', async (e) => {
+      const file = e.target.files && e.target.files[0];
       if (file) {
         currentReceiptFileName = file.name;
         currentReceiptFileType = file.type || '';
         state.receiptFileName = file.name;
-        selectedFilename.textContent = file.name;
-        dropzonePrompt.classList.add('hidden');
-        dropzoneSelected.classList.remove('hidden');
+        if (selectedFilename) selectedFilename.textContent = file.name;
+        if (dropzonePrompt) dropzonePrompt.classList.add('hidden');
+        if (dropzoneSelected) dropzoneSelected.classList.remove('hidden');
 
-        // Lê a imagem/PDF em Base64 para armazenar no painel do gestor
-        const reader = new FileReader();
-        reader.onload = (event) => {
-          currentReceiptDataUrl = event.target.result;
-          
-          // Se o cliente já preencheu nome e telefone, pré-grava no painel
+        try {
+          currentReceiptDataUrl = await optimizeReceiptFile(file);
           const custName = document.getElementById('directCustName')?.value.trim();
           const custPhone = document.getElementById('directCustPhone')?.value.trim();
           if (custName && custPhone) {
             autoRecordOrderDraft(custName, custPhone);
           }
-        };
-        reader.readAsDataURL(file);
+        } catch (err) {
+          console.warn('Erro ao processar comprovante:', err);
+        }
       }
     });
   }
@@ -680,13 +765,14 @@ document.addEventListener('DOMContentLoaded', () => {
   if (btnRemoveFile) {
     btnRemoveFile.addEventListener('click', (e) => {
       e.stopPropagation();
-      receiptFileInput.value = '';
+      e.preventDefault();
+      if (receiptFileInput) receiptFileInput.value = '';
       currentReceiptDataUrl = null;
       currentReceiptFileName = '';
       currentReceiptFileType = '';
       state.receiptFileName = '';
-      dropzonePrompt.classList.remove('hidden');
-      dropzoneSelected.classList.add('hidden');
+      if (dropzonePrompt) dropzonePrompt.classList.remove('hidden');
+      if (dropzoneSelected) dropzoneSelected.classList.add('hidden');
     });
   }
 
@@ -719,7 +805,9 @@ document.addEventListener('DOMContentLoaded', () => {
   const submitOrderBtn = document.getElementById('submitOrderBtn');
 
   if (submitOrderBtn) {
-    submitOrderBtn.addEventListener('click', async () => {
+    submitOrderBtn.addEventListener('click', async (e) => {
+      if (e) e.preventDefault();
+
       const custName = document.getElementById('directCustName')?.value.trim();
       const custPhone = document.getElementById('directCustPhone')?.value.trim();
 
@@ -735,16 +823,32 @@ document.addEventListener('DOMContentLoaded', () => {
         return;
       }
 
-      const total = calculateFormattedTotal();
       const receiptInput = document.getElementById('receiptFileInput');
       const arquivo = receiptInput?.files?.[0];
+      const hasReceipt = !!(arquivo || currentReceiptFileName || state.receiptFileName);
 
-      if (!arquivo) {
+      if (!hasReceipt) {
         alert('Anexe o comprovante do PIX antes de continuar.');
-        receiptInput?.click();
+        if (dropzoneReceipt) {
+          dropzoneReceipt.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          dropzoneReceipt.style.borderColor = '#ff3d00';
+          setTimeout(() => {
+            dropzoneReceipt.style.borderColor = '';
+          }, 2000);
+        }
         return;
       }
-      // Grava no Painel do Gestor imediatamente
+
+      // Se o comprovante ainda estiver sendo otimizado, garante a leitura
+      if (arquivo && !currentReceiptDataUrl) {
+        try {
+          currentReceiptDataUrl = await optimizeReceiptFile(arquivo);
+        } catch (err) {
+          console.warn('Erro ao otimizar comprovante no envio:', err);
+        }
+      }
+
+      const total = calculateFormattedTotal();
       const orderRecord = {
         id: 'PED_' + Date.now() + '_' + Math.floor(Math.random() * 1000),
         customerName: custName,
@@ -757,16 +861,34 @@ document.addEventListener('DOMContentLoaded', () => {
         timestamp: Date.now(),
         displayDate: new Date().toLocaleDateString('pt-BR'),
         displayTime: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
-        hasReceipt: !!currentReceiptDataUrl,
-        receiptFileName: currentReceiptFileName || state.receiptFileName || '',
-        receiptFileType: currentReceiptFileType,
+        hasReceipt: true,
+        receiptFileName: currentReceiptFileName || state.receiptFileName || (arquivo ? arquivo.name : 'comprovante.jpg'),
+        receiptFileType: currentReceiptFileType || (arquivo ? arquivo.type : 'image/jpeg'),
         receiptDataUrl: currentReceiptDataUrl || null,
         status: 'Confirmado'
       };
 
-      await saveOrderToDB(orderRecord);
+      // Feedback visual imediato
+      const originalHtml = submitOrderBtn.innerHTML;
+      submitOrderBtn.disabled = true;
+      submitOrderBtn.style.opacity = '0.85';
+      submitOrderBtn.innerHTML = `
+        <span class="btn-order-icon">⏳</span>
+        <span class="btn-order-text">ABRINDO O WHATSAPP...</span>
+        <span class="btn-order-sub">Aguarde um instante</span>
+      `;
 
-      // Mensagem para o WhatsApp
+      // Gravação com timeout rápido para NUNCA travar a abertura no celular
+      try {
+        await Promise.race([
+          saveOrderToDB(orderRecord),
+          new Promise((resolve) => setTimeout(resolve, 350))
+        ]);
+      } catch (err) {
+        console.warn('Aviso ao registrar pedido localmente:', err);
+      }
+
+      // Mensagem oficial para o WhatsApp
       let msg = `🏃 *PEDIDO OFICIAL - CORRE POTENGI 2026*\n\n`;
       msg += `Olá! Realizei o pagamento via PIX e quero confirmar minha camisa oficial:\n\n`;
       msg += `👕 *Produto:* Camisa Oficial Corre Potengi (UNISSEX)\n`;
@@ -781,8 +903,9 @@ document.addEventListener('DOMContentLoaded', () => {
       msg += `🗓️ *Data de Retirada:* Na semana do evento\n`;
       msg += `⚠️ *Aviso de Entrega:* Ciente de que não há entrega em domicílio, apenas retirada no local.\n\n`;
 
-      if (state.receiptFileName) {
-        msg += `📎 *Comprovante Anexado:* Sim (${state.receiptFileName})\n`;
+      const repFileName = orderRecord.receiptFileName || state.receiptFileName;
+      if (repFileName) {
+        msg += `📎 *Comprovante Anexado:* Sim (${repFileName})\n`;
         msg += `*(Estou enviando a imagem/PDF do comprovante logo abaixo desta mensagem)*\n\n`;
       } else {
         msg += `📎 *Comprovante:* (Estou enviando o print/comprovante a seguir)\n\n`;
@@ -791,8 +914,28 @@ document.addEventListener('DOMContentLoaded', () => {
       msg += `#EuTôNoCorre #CorrePotengi #AcunhaAaaa`;
 
       const encodedMsg = encodeURIComponent(msg);
-      const whatsappUrl = `https://wa.me/${WHATSAPP_NUMBER}?text=${encodedMsg}`;
-      window.open(whatsappUrl, '_blank');
+      const whatsappUrl = `https://api.whatsapp.com/send?phone=${WHATSAPP_NUMBER}&text=${encodedMsg}`;
+
+      // Detecção de ambiente móvel (Android, iOS, iPadOS, telas estreitas)
+      const isMobile = /Android|iPhone|iPad|iPod|Windows Phone|webOS|BlackBerry/i.test(navigator.userAgent) || (window.innerWidth <= 768);
+
+      // Restaura o botão após curto intervalo
+      setTimeout(() => {
+        submitOrderBtn.disabled = false;
+        submitOrderBtn.style.opacity = '1';
+        submitOrderBtn.innerHTML = originalHtml;
+      }, 3000);
+
+      if (isMobile) {
+        // No celular: redireciona diretamente na mesma janela (abre o app do WhatsApp nativo sem popup blocker)
+        window.location.href = whatsappUrl;
+      } else {
+        // No PC: abre em nova aba para manter o site aberto, com fallback caso bloqueie popup
+        const newWin = window.open(whatsappUrl, '_blank');
+        if (!newWin || newWin.closed || typeof newWin.closed === 'undefined') {
+          window.location.href = whatsappUrl;
+        }
+      }
     });
   }
 
